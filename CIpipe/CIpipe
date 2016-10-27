@@ -1,0 +1,1327 @@
+#!/usr/bin/python
+__version__ = '1.146'
+
+##----PACKAGE------##
+import argparse
+import datetime
+import time
+import sys
+import os
+import subprocess
+import numpy
+import shutil
+from argparse import RawTextHelpFormatter
+from pkg_resources import resource_filename
+from multiprocessing import Pool
+
+##----MAIN---------#
+def main():
+	args = get_args()
+
+	if len(sys.argv) < 2:
+		print_ornament('   ABORT! no input!', 100, ' ', 1, 0)
+	
+	elif args.input == 'none' and not args.example:
+		run_mode_one(args)
+
+	else:
+		run_mode_more(args)
+
+##----CODA---------##
+	print_ornament('> END', 100, ' ', 1, 1)
+	print_ornament('', 100, '-', 0, 0)
+	print '\n\n'
+
+##----FUNCTION-----##
+#---get args---
+def get_args():
+	tool = os.path.basename(sys.argv[0])
+	author = 'Yingxiang Li'
+	email = 'xlccalyx@gmail.com'
+	date = 'Apr 15, 2016'
+	update_date = '062216'
+	home = 'https://zlab.umassmed.edu/CIpipe/'
+
+	parser = argparse.ArgumentParser(description='\ttool:   ' + tool + ' v' + __version__ + '\n\tdate:   ' + date + '(' + update_date + ')\n\tauthor: ' + author + ' (' + email + ')\n\thome:   ' + home + '\n\tMUST-install (NOT guaranteed on other versions):\n\t        python: 2.7.10; R 3.2.2; cutadapt: 1.10; bwa: 0.7.5a; fastqc: v0.11.2; samtools: 1.3; java: 1.7.0_95\n\tYou can find manual and test case in home.', prog=tool, formatter_class=RawTextHelpFormatter)
+
+	parser.add_argument('-V', '--version', action='version', version='%(prog)s v' + __version__)
+
+#---parser for mode one
+	parser.add_argument('-R', '--reference', help='sample reference file, fasta format. (eg: my_ref.fa)')
+	parser.add_argument('-D', '--data', help='sample data directory, fastq-ONLY. one file for single end, two files for paired end. (eg: my_data/)')
+	parser.add_argument('-O', '--output', help='output directory, will be created if not exists. (eg: my_output/)')
+
+	parser.add_argument('-F', '--refresh', help='whether to refresh all processes. default: OFF, -RE will turn ON.', action='store_true', default=False)
+#	parser.add_argument('-K', '--keep', help='whether to refresh and keep the old results. default: OFF, -K will turn ON.', action='store_true', default=False)
+
+	parser.add_argument('-N', '--name', help='sample name, default is name of output directory. (eg: my_sample)', default='none')
+	parser.add_argument('-RK', '--rank', help='sample rank. (eg: 1)', default='none')
+
+	parser.add_argument('-CA', '--cutadapta', help='cut 3\' adapter with cutadapt, default: none.', default='none')
+	parser.add_argument('-CG', '--cutadaptg', help='cut 5\' adapter with cutadapt, default: none.', default='none')
+
+	parser.add_argument('-S', '--seed', help='the minimum seed length in BWA, default: 19.', default='19')
+
+#	parser.add_argument('-F', '--fastqc', help='whether to check fastq quality by FastQC. default: ON, -F will turn OFF.', action='store_false', default=True)
+#	parser.add_argument('-X', '--index', help='whether to build reference index by BWA. default: ON, -X will turn OFF.', action='store_false', default=True)
+	parser.add_argument('-M', '--markdup', help='whether to mark and remove duplicate by Picard. default: OFF, -PC will turn ON.', action='store_true', default=False)
+	parser.add_argument('-U', '--unlimited', help='whether to set no read depth limit in mpileup by SAMtools. default: ON, -U will turn OFF.', action='store_false', default=True)
+
+	parser.add_argument('-G', '--gatk', help='whether to search for indel by GATK. default: OFF, -G will turn ON.', action='store_true', default=False)
+
+	parser.add_argument('-P', '--pvalue', help='minimal p value, default: 0.05.', default='0.05')
+	parser.add_argument('-B', '--basequality', help='minimal base quality, default: 30.', default='30')
+	parser.add_argument('-A', '--varfreq', help='minimal variant frequency, default: 0.0001.', default='0.0001')
+
+	parser.add_argument('-VO', '--vcf', help='whether to output VarScan in VCF format. default: OFF, -VI will turn ON.', action='store_true', default=False)
+	parser.add_argument('-VI', '--indel', help='whether to search for indel by VarScan. default: ON, -VI will turn OFF.', action='store_false', default=True)
+	parser.add_argument('-VR', '--readcount', help='whether to search for read counts by VarScan. default: ON, -VR will turn OFF.', action='store_false', default=True)
+	parser.add_argument('-VS', '--snp', help='whether to search for SNP by VarScan. default: OFF, -VS will turn ON.', action='store_true', default=False)
+	parser.add_argument('-VC', '--consensus', help='whether to search for consensus call by VarScan. default: OFF, -VC will turn ON.', action ='store_true', default=False)
+
+	parser.add_argument('-T', '--target', help='CRISPR target position. indel in target range will be picked out, mutiple targets separated by \',\', default: \'none\'. (eg: gene1:100,gene2:200)', default='none')
+	parser.add_argument('-US', '--upstream', help='up stream distance from CRISPR target position, default: 20.', default='20')
+	parser.add_argument('-DS', '--downstream', help='down stream distance from CRISPR target position, default: 10.', default='10')
+	parser.add_argument('-Q', '--resultfreq', help='to select the results above appointed frequency, default: 0.05.', default='0.05')
+
+#---parser for mode more
+	parser.add_argument('-E', '--example', help='whether to create example input data. modify the example.input.tab to fit your data. default: OFF, -E will turn ON.', action='store_true', default=False)
+	parser.add_argument('-I', '--input', help='information table of all input data. all settings should be in it. (eg. example.input.tab)', default='none')
+
+#---head
+	args = parser.parse_args()
+
+	print '\n\n\t' + ' '.join(sys.argv[:]) + '\n'
+	print_ornament('', 100, '-', 0, 0)
+	print_ornament('tool:   ' + tool + ' v' + __version__, 100, ' ', 0, 0)
+	print_ornament('author: ' + author + ' (' + email + ')', 100, ' ', 0, 0)
+	print_ornament('', 100, '-', 0, 0)
+	print_ornament('> BEGIN', 100, ' ', 1, 1)
+
+	return args
+
+#---run mode one---
+def run_mode_one(args):
+	start_time = datetime.datetime.now()
+	preset_one = run_preset_one(args)
+
+	if not preset_one:
+		print_ornament('fix the problems above and re-try!', 100, ' ', 0, 0)
+
+	else:
+		sample_name = preset_one
+
+		if os.path.exists(os.path.normpath(args.output) + '/' + sample_name + '/'):
+			print_ornament(' WARNING! output directory exists.', 100, ' ', 1, 0)
+
+		#-output & log directory
+		sample_output_dir = make_dir(os.path.normpath(args.output) + '/' + sample_name + '/')
+		sample_result_dir = make_dir(sample_output_dir + 'result/')
+		sample_log_dir = make_dir(sample_output_dir + '/log/')
+		setting_one_file = sample_log_dir + 'setting.sh'
+		if os.path.isfile(setting_one_file):
+			os.remove(setting_one_file)
+		run_setting(args, setting_one_file)
+
+		#-fastq file
+		fastq_file_all = sorted([x for x in os.listdir(args.data) if x.endswith('.fq') or x.endswith('.fastq')])
+		fastq1_file = args.data + '/' + fastq_file_all[0]
+		fastq2_file = '' if len(fastq_file_all) == 1 else args.data + '/' + fastq_file_all[1]
+
+#		if not args.modify:
+		#---bwa index
+		run_bwa_index(args, sample_log_dir)
+
+		#---fastqc quality control
+		run_fastqc_quality_control(args, sample_output_dir, fastq1_file, fastq2_file, sample_log_dir)
+
+		#---cutadapt cut adapter
+		fastq1_file, fastq2_file = run_cutadapt_cut_adapter(args, sample_output_dir, fastq1_file, fastq2_file, sample_log_dir)
+
+		if fastq1_file != '':
+			#---bwa map
+			bwa_map = run_bwa_map(fastq2_file, sample_output_dir, sample_name, args, fastq1_file, sample_log_dir)
+
+			if bwa_map:
+				#---samtools sam to bam
+				samtools_sam_to_bam = run_samtools_sam_to_bam(args, sample_output_dir, sample_name, sample_log_dir)
+
+				if samtools_sam_to_bam:
+					#---samtools sort index
+					samtools_sort_index = run_samtools_sort_index(args, sample_output_dir, sample_name, sample_log_dir)
+
+					if samtools_sort_index:
+						#---basic information
+						samtools_flagstat = run_samtools_flagstat(args, sample_output_dir, sample_name, sample_log_dir)
+
+						if samtools_flagstat:
+							#---get data infor
+							has_map_ratio = get_data_infor(sample_output_dir, sample_name, args, sample_result_dir, fastq1_file, fastq2_file)
+
+						if has_map_ratio:
+
+							if args.markdup:
+								picard_app = resource_filename(os.path.basename(sys.argv[0]), 'picard.jar')
+								#---picard mark duplicate
+								picard_mark_duplicate = run_picard_mark_duplicate(sample_output_dir, sample_name, args, picard_app, sample_log_dir)
+
+							if args.gatk:
+								picard_app = resource_filename(os.path.basename(sys.argv[0]), 'picard.jar')
+								#---run picard create sequence dictionary
+								picard_create_sequence_dictionary = run_picard_create_sequence_dictionary(args, sample_output_dir, sample_name, picard_app, sample_log_dir)
+
+								if picard_create_sequence_dictionary:
+
+									gatk_app = resource_filename(os.path.basename(sys.argv[0]), 'GenomeAnalysisTK.jar')
+									#---run gatk indel
+									gatk_indel = run_gatk_indel(args, sample_output_dir, sample_name, gatk_app, sample_log_dir)
+
+									if gatk_indel:
+										#---finish information
+										print_ornament('CONGRATS! \'' + sample_name + '\' (gatk) is finished!', 100, ' ', 1, 0)
+										run_done(start_time, sample_log_dir)
+
+								else:
+									print_ornament('   ABORT! fix picard dictionary and re-try!', 100, ' ', 0, 0)
+
+							else:
+								#---samtools mpileup
+								samtools_mpileup = run_samtools_mpileup(args, sample_output_dir, sample_name, sample_log_dir)
+
+								if samtools_mpileup:
+									varscan = resource_filename(os.path.basename(sys.argv[0]), 'VarScan.v2.3.9.jar')
+									#---varscan indel
+									run_varscan_indel(args, sample_output_dir, sample_name, varscan, sample_log_dir)
+									#---varscan snp
+									run_varscan_snp(args, sample_output_dir, sample_name, varscan, sample_log_dir)
+									#---varscan consensus call
+									run_varscan_consensus_call(args, sample_output_dir, sample_name, varscan, sample_log_dir)
+									#---varscan read count
+									run_varscan_read_count(args, sample_output_dir, sample_name, varscan, sample_log_dir)
+
+									#---varscan result
+									get_indel_brief_result(args, sample_output_dir, sample_name, sample_result_dir)
+	#								get_indel_normalized_result(args, output_dir, name, result_dir)
+									has_indel = get_indel_near_target(args, sample_output_dir, sample_name, sample_result_dir)
+									if has_indel:
+										plot_indel_detail(sample_output_dir, sample_name, args, sample_result_dir, sample_log_dir)
+										plot_indel_distribution(sample_output_dir, sample_name, args, sample_result_dir, sample_log_dir)
+
+									#---finish information
+									print_ornament('CONGRATS! \'' + sample_name + '\' (varscan) is finished!', 100, ' ', 1, 0)
+									run_done(start_time, sample_log_dir)
+
+								else:
+									print_ornament('   ABORT! fix SAMtools mpileup and re-try!', 100, ' ', 0, 0)
+
+						else:
+							print_ornament('   ABORT! no mapped reads, check your reference!', 100, ' ', 0, 0)
+
+					else:
+						print_ornament('   ABORT! fix SAMtools sort and re-try!', 100, ' ', 0, 0)
+
+				else:
+					print_ornament('   ABORT! fix SAMtools sam to bam and re-try!', 100, ' ', 0, 0)
+
+			else:
+				print_ornament('   ABORT! fix BWA map and re-try!', 100, ' ', 0, 0)
+
+		else:
+			print_ornament('   ABORT! fix cutadapt cut adapter and re-try!', 100, ' ', 0, 0)
+
+
+#---run preset one--
+def run_preset_one(args):
+	has_samtools = run_shell('samtools --version', 1)
+	has_R = run_shell('R --version', 1)
+#	has_bwa = run_shell('bwa', 1)
+	has_fastqc = run_shell('fastqc --version', 1)
+#	has_java = run_shell('java -version', 1)
+
+	require_program = [has_samtools, has_R, has_fastqc]
+	require_program_name = ['samtools', 'R', 'FastQC']
+
+	is_require_program = True
+	for i in range(3):
+		if require_program[i] == '':
+			print_ornament('   ABORT! {0} doesn\'t exist!'.format(require_program_name[i]), 100, ' ', 1, 0)
+			is_require_program = False
+			return False
+			break
+
+	if is_require_program:
+#		samtools_version = float(has_samtools.split('samtools ')[1].split()[0])
+		samtools_version = 1.4
+		if samtools_version < 1.3:
+			print_ornament('   ABORT! samtools version is lower than 1.3!', 100, ' ', 1, 0)
+			return False
+
+		else:
+			if not args.reference.endswith('.fa') and not args.reference.endswith('.fasta'):
+				print_ornament('   ABORT! -R file. should be fa(sta) format!', 100, ' ', 1, 0)
+				return False
+
+			if not os.path.isdir(args.data):
+				print_ornament('   ABORT! -D data. should be a directory!', 100, ' ', 1, 0)
+				return False
+
+			else:
+				fastq_file = [x for x in os.listdir(args.data) if x.endswith('fq') or x.endswith('fastq')]
+				if len(fastq_file) > 2:
+					print_ornament('   ABORT! -D data. more than 2 fastq-ONLY files!', 100, ' ', 1, 0)
+					return False
+				elif len(fastq_file) == 0:
+					print_ornament('   ABORT! -D data. no fastq file in the directory!', 100, ' ', 1, 0)
+					return False
+#				elif len(fastq_file) < len(os.listdir(args.data)):
+#					print_ornament('   ABORT! -D data. remove fastq-NOT files!', 100, ' ', 1, 0)
+#					return False
+				else:
+					if args.name == 'none':
+						preset_one = [x for x in args.output.split('/') if x != ''][-1]
+						print_ornament(' WARNING! directory name will be assigned as output name.', 100, ' ', 1, 0)
+					else:
+						preset_one = args.name
+					return preset_one
+
+#---run mode more---
+def run_mode_more(args):
+	if args.example:
+		example_input_file = resource_filename(os.path.basename(sys.argv[0]), 'example.input.tab')
+		os.system('cp ' + example_input_file + ' .')
+		print_ornament('example.input.tab created in current dir, modify it!', 100, ' ', 0, 0)
+
+	else:
+		preset_more = run_preset_more(args)
+		if not preset_more:
+			print_ornament('fix the problems above and re-try!', 100, ' ', 0, 0)
+
+		else:
+			log_dir, thread_number, args_more = preset_more
+			pool = Pool(thread_number) 
+			pool_result = pool.map(run_mode_one, args_more)
+			pool.close() 
+			pool.join()
+
+			result_dir = make_dir(args_more[0].output + args_more[0].batch + '.result/')
+			run_indel_matrix(result_dir, args_more)
+			run_map_infor_matrix(result_dir, args_more)
+			run_collect_result(result_dir, args_more)
+
+			os.chdir(args_more[0].output)
+#			zip_compress = 'zip -r ' + args_more[0].batch + '.result.zip ' + args_more[0].batch + '.result/' 
+			tar_compress = 'tar cvzf ' + args_more[0].batch + '.result.gz ' + args_more[0].batch + '.result/' 
+			run_bash_command(log_dir, 'tar_Compress.' + args_more[0].batch, tar_compress)
+
+			print_ornament('CONGRATS! CIpipe multiple samples were finished!', 100, ' ', 1, 0)
+			write_content(log_dir + 'done', ' '.join(sys.argv[:]))
+
+#---run preset more--
+def run_preset_more(args):
+	if not os.path.isfile(args.input):
+		print_ornament('   ABORT! -I input. should be input file!', 100, ' ', 1, 0)
+		return False
+	else:
+		input_table_default = open(resource_filename('CIpipe', 'example.input.tab'), 'rU').readlines()
+		input_key_default = [x.split('\t')[0].lstrip() for x in input_table_default]
+		input_value_default = [x.rstrip().split('\t')[1:] for x in input_table_default]
+		input_table = open(args.input, 'rU').readlines()
+#		input_table = open('/data/tongji1/liyx/CIpipe/simulation/simulation.input.tab', 'rU').readlines()
+#		input_table = open('/data/tongji1/liyx/CIpipe/simulation/input/wgsim.simulate.input.tab', 'rU').readlines()
+		input_key = [x.split('\t')[0].lstrip() for x in input_table]
+		input_value = [x.rstrip().split('\t')[1:] for x in input_table]
+		input_dict =  dict(zip(input_key, input_value))
+
+		if not input_key == input_key_default:
+			print_ornament('   ABORT! input.tab parameter names are not default!', 100, ' ', 1, 0)
+			return False
+		else:
+			output_dir = make_dir(input_dict['output'][0] + input_dict['batch'][0] + '/')
+			log_dir = make_dir(output_dir + input_dict['batch'][0] + '.log/')
+			thread_number = int(input_dict['thread'][0])
+			group_order = get_group_order(input_dict['group'])
+
+			if len(group_order) == len(input_dict['name']):
+				input_dict['name'] = sum([[input_dict['name'][i] + '_' + str(y) for y in group_order[i]] for i in range(len(input_dict['name']))], [])
+			reference_all = sum([[os.path.basename(input_dict['reference'][i]) for y in group_order[i]] for i in range(len(input_dict['reference']))], [])
+
+			if input_dict['data'][0].endswith('/'):
+				data_all = [x.split('/')[-2] for x in input_dict['data']]
+			else:
+				data_all = [x.split('/')[-1] for x in input_dict['data']]
+
+			if len(data_all) != len(input_dict['name']):
+				print_ornament('   ABORT! data amount != group value!', 100, ' ', 1, 0)
+				return False
+			else:
+				if len(input_dict['type']) != len(input_dict['data']):
+					type_all = ['na']*len(input_dict['data'])
+				else:
+					type_all = input_dict['type']
+				input_infor_file = make_dir(input_dict['output'][0] + input_dict['batch'][0] + '/' + input_dict['batch'][0] + '.result/') + input_dict['batch'][0] + '.basic.txt'
+				input_infor = 'name\ttype\treference\tdata\n' + '\n'.join(['\t'.join([input_dict['name'][i], type_all[i], reference_all[i], data_all[i]]) for i in range(len(input_dict['name']))]) + '\n'
+				write_content(input_infor_file, input_infor)
+				args_more = [get_args_one(input_dict, name, group_order) for name in input_dict['name']]
+	#			args_more = [get_args_one_data(input_dict, data, group_order) for data in input_dict['data']]
+				preset_more = (log_dir, thread_number, args_more)
+				return preset_more
+
+#args_dict = {'input':'/data/tongji1/liyx/CSIA/Test/Input/GB.Input.tab'}
+#args_dict = {'input':'/home/tongji1/data/songcq/pcsk9.sod1/07SEP16_MiSeq_ATGWA/input/psck9_sod2.yl.tab'}
+#args=get_class_from_dict(**args_dict)
+
+#---get args one from mode more---
+def get_args_one(input_dict, name, group_order):
+	name_group = [input_dict['name'].index(name) + 1 in x for x in group_order].index(1)
+	args_one_value = []
+	for key in input_dict.keys():
+		if len(input_dict[key]) == 1:
+			if input_dict[key][0] == 'ON' or input_dict[key][0] == 'OFF':
+				args_one_value.append([True, False][input_dict[key][0] == 'OFF'])
+			else:
+				args_one_value.append(input_dict[key][0])
+		else:
+			if len(input_dict[key]) == len(input_dict['name']):
+				args_one_value.append(input_dict[key][input_dict['name'].index(name)])
+			else:
+				args_one_value.append(input_dict[key][name_group])
+	args_one_dict = dict(zip(input_dict.keys(), args_one_value))
+	args_one_dict['output'] = args_one_dict['output'] + input_dict['batch'][0] + '/'
+	args_one_dict['rank'] = str(input_dict['name'].index(name) + 1)
+	args_one = get_class_from_dict(**args_one_dict)
+	return args_one
+
+#---run setting--
+def run_setting(args, setting_file):
+	setting_content = 'CIpipe\n' + '\n'.join([x + ': ' + str(getattr(args, x)) for x in dir(args) if not x.startswith('_')]) + '\n'
+	write_content(setting_file, setting_content)
+
+#---run done--
+def run_done(start_time, log_dir):
+	done_file = log_dir + 'done.txt'
+	ellaspe_time = format((datetime.datetime.now() - start_time).seconds, ',') + 's'
+	write_content(done_file, ellaspe_time)
+
+#---run bwa index--
+def run_bwa_index(args, log_dir):
+	bwa_index_file_exist = [os.path.isfile(args.reference + x) for x in ['.amb', '.ann', '.bwt', '.fai', '.pac', '.sa']]
+	if sum(bwa_index_file_exist) != 6 or args.refresh:
+		print_process_time('bwa: index -' + args.rank)
+		bwa_index = 'bwa index -a bwtsw ' + args.reference
+		refer_name = os.path.basename(os.path.splitext(args.reference)[0])
+		run_bash_command(log_dir, 'BWA_Index.' + refer_name, bwa_index)
+		print_process_time('bwa: index -' + args.rank, 1)
+	else:
+		print_ornament(' WARNING! \'bwa index\' existed! skipped.', 100, ' ', 1, 0)
+
+#---run FastQC quality control--
+def run_fastqc_quality_control(args, output_dir, fastq1_file, fastq2_file, log_dir):
+	quality_control_dir = make_dir(output_dir + 'FastQC/')
+#	fastqc_fastq_file_exist = [os.path.isfile(quality_control_dir + os.path.basename(os.path.splitext(x)[0]) + '_fastqc.zip') for x in [fastq1_file, fastq2_file]]
+	fastqc_zip_file = [x for x in os.listdir(quality_control_dir) if x.endswith('.zip')]
+#	quality_control_dir = '/data/tongji1/liyx/CIpipe/simulation/output/wgsim_simulate_0817/simulate_6C2_11/FastQC/'
+#	fastq1_file = '/data/tongji1/liyx/CIpipe/simulation/data/wgsim/ins500A_del5001_del5003_del50030/ins500A_del5001_del5003_del50030.r1.fq'
+#	if args.fastqc:	
+	if len(fastqc_zip_file) != [1, 2][fastq2_file != ''] or args.refresh:
+		print_process_time('fastqc: quality control -' + args.rank)
+		fastqc_quality_control = 'fastqc -q --extract -o ' + quality_control_dir + ' ' + fastq1_file + ' ' + fastq2_file
+		run_bash_command(log_dir, 'FastQC_QualiyControl', fastqc_quality_control)
+		print_process_time('fastqc: quality control -' + args.rank, 1)
+		if len(os.listdir(quality_control_dir)) == 0:
+			print_ornament(' WARNING! no fastqc result! check FastQC_QualiyControl.log!', 100, ' ', 1, 0)
+	else:
+		print_ornament(' WARNING! \'fastqc\' existed! skipped.', 100, ' ', 1, 0)
+
+#---run cutadapt cut adapter--
+def run_cutadapt_cut_adapter(args, output_dir, fastq1_file, fastq2_file, log_dir):
+	if args.cutadapta == 'none' and args.cutadaptg == 'none':
+		print_ornament(' WARNING! no adapter cut.', 100, ' ', 1, 0)
+		return fastq1_file, fastq2_file
+
+	else:
+		cutadapt_dir = make_dir(output_dir + 'cutadapt/')
+		fastq1_ca_file = cutadapt_dir + 'read1_ca' + ['', '3'][args.cutadapta != 'none'] + ['', '5'][args.cutadaptg != 'none'] + '.fq' 
+		fastq2_ca_file = ['', cutadapt_dir + 'read2_ca' + ['', '3'][args.cutadapta != 'none'] + ['', '5'][args.cutadaptg != 'none'] + '.fq'][fastq2_file != '']
+
+		if len(os.listdir(cutadapt_dir)) == 0:
+			print_process_time('cutadapt: cut adapter -' + args.rank)
+			cutadapt_cut_adapter = 'cutadapt' + ['', ' -a ' + args.cutadapta][args.cutadapta != 'none'] + ['', ' -g ' + args.cutadaptg][args.cutadaptg != 'none'] + ' ' + fastq1_file + ' > ' + fastq1_ca_file
+			run_bash_command(log_dir, 'cutadapt_CutAdapter1', cutadapt_cut_adapter)
+			if fastq2_file != '':
+				cutadapt_cut_adapter = 'cutadapt' + ['', ' -a ' + args.cutadapta][args.cutadapta != 'none'] + ['', ' -g ' + args.cutadaptg][args.cutadaptg != 'none'] + ' ' + fastq2_file + ' > ' + fastq2_ca_file
+				run_bash_command(log_dir, 'cutadapt_CutAdapter2', cutadapt_cut_adapter)
+			print_process_time('cutadapt: cut adapter -' + args.rank, 1)
+			return fastq1_ca_file, fastq2_ca_file
+
+			if len(os.listdir(cutadapt_dir)) == 0:
+				print_ornament(' ABORT! no cutadapt result! check cutadapt_CutAdapter.log!', 100, ' ', 1, 0)
+				return '', ''
+		else:
+			print_ornament(' WARNING! \'cutadapt\' existed! skipped.', 100, ' ', 1, 0)
+			return fastq1_ca_file, fastq2_ca_file
+
+#---run bwa map--
+def run_bwa_map(fastq2_file, output_dir, name, args, fastq1_file, log_dir):
+	map_file = make_dir(output_dir + 'BWA/') + name + '.sam'
+	if not os.path.isfile(map_file) or args.refresh:
+		is_pair = ['pair', 'single'][fastq2_file == '']
+		print_process_time('bwa: map (' + is_pair + [')', ',seed:{0})'.format(args.seed)][int(args.seed) < 19] + ' -' + args.rank)
+		bwa_map = 'bwa mem -M -t 16 -k ' + args.seed + ''' -R "@RG\\tID:''' + name + '.BWA_map.' + is_pair + '\\tLB:bwa\\tPL:NA\\tSM:' + name + '\" ' + args.reference + ' ' + fastq1_file + ' ' + fastq2_file + ' > ' + map_file
+		run_bash_command(log_dir, 'BWA_Map', bwa_map)	
+		print_process_time('bwa: map -' + args.rank, 1)
+		if get_file_size(map_file) == 0:
+			print_ornament('   ABORT! no bwa result! check BWA_Map.log!', 100, ' ', 1, 0)
+			return False
+		else:
+			return True
+	else:
+		print_ornament(' WARNING! \'bwa map\' existed! skipped.', 100, ' ', 1, 0)
+		return True
+
+#---run bwa map--
+def old_run_bwa_map(fastq2_file, output_dir, name, args, fastq1_file, log_dir):
+	map_file = make_dir(output_dir + 'BWA/') + name + '.sam'
+	if not os.path.isfile(map_file) or args.refresh:
+		is_pair = ['pair', 'single'][fastq2_file == '']
+		print_process_time('bwa: map ' + is_pair + ['', ' (large indel)'][args.large] + ' -' + args.rank)
+		map_file = make_dir(output_dir + 'BWA/') + name + '.sam'
+		bwa_map = '''bwa mem -t 10 -R "@RG\\tID:''' + name + '.BWA_map.' + is_pair + '\\tLB:bwa\\tPL:NA\\tSM:' + name + '\" ' + ['', '-O 0 -E 0 '][args.large] + args.reference + ' ' + fastq1_file + ' ' + fastq2_file + ' > '+ map_file
+		run_bash_command(log_dir, 'BWA_Map', bwa_map)	
+		print_process_time('bwa: map -' + args.rank, 1)
+		if get_file_size(map_file) == 0:
+			print_ornament('   ABORT! no bwa result! check BWA_Map.log!', 100, ' ', 1, 0)
+			return False
+		else:
+			return True
+	else:
+		print_ornament(' WARNING! \'bwa map\' existed! skipped.', 100, ' ', 1, 0)
+		return True
+
+#---samtools: sam to bam--
+def run_samtools_sam_to_bam(args, output_dir, name, log_dir):
+	bam_file = make_dir(output_dir + 'SAMtools/') + name + '.bam'
+	if not os.path.isfile(bam_file) or args.refresh:
+		print_process_time('samtools: sam to bam -' + args.rank)
+		map_file = output_dir + 'BWA/' + name + '.sam'
+		samtools_sam_to_bam = 'samtools view -bhS ' + map_file + ' -o ' + bam_file
+		run_bash_command(log_dir, 'SAMtools_SamToBam', samtools_sam_to_bam)
+		print_process_time('samtools: sam to bam -' + args.rank, 1)
+		if not os.path.isfile(bam_file):
+			print_ornament('   ABORT! no bam result! check SAMtools_SamToBam.log!', 100, ' ', 1, 0)
+			return False
+		else:
+			return True
+	else:
+		print_ornament(' WARNING! \'sam to bam\' existed! skipped.', 100, ' ', 1, 0)
+		return True
+
+#---run samtools sort&index--
+def run_samtools_sort_index(args, output_dir, name, log_dir):
+	bam_file = output_dir + 'SAMtools/' + name + '.bam'
+	sort_bam_file = bam_file.replace('.bam', '.sort.bam')
+	sort_bam_index_file = sort_bam_file + '.bai'
+	if not (os.path.isfile(sort_bam_file) and os.path.isfile(sort_bam_index_file)) or args.refresh:
+		print_process_time('samtools: sort & index -' + args.rank)
+		sort_bam_file = bam_file.replace('.bam', '.sort.bam')
+		samtools_sort = 'samtools sort ' + bam_file + ' -o ' + sort_bam_file
+		samtools_index = 'samtools index ' + sort_bam_file
+		run_bash_command(log_dir, 'SAMtools_Sort', samtools_sort)
+		run_bash_command(log_dir, 'SAMtools_Index', samtools_index)	
+		print_process_time('samtools: sort & index -' + args.rank, 1)
+
+		if not os.path.isfile(sort_bam_file):
+			print_ornament('   ABORT! no bam sort result! check SAMtools_Sort.log!', 100, ' ', 1, 0)
+			return False
+		else:
+			return True
+	else:
+		print_ornament(' WARNING! \'bam sort & index\' existed! skipped.', 100, ' ', 1, 0)
+		return True
+
+#---run picard mark duplicate--
+def run_picard_mark_duplicate(sample_output_dir, sample_name, args, picard_app, sample_log_dir):
+	sort_bam_file = sample_output_dir + 'SAMtools/' + sample_name + '.sort.bam'
+	mark_duplicate_file = make_dir(sample_output_dir + 'Picard/') + sample_name + '.dedup.bam'
+	mark_duplicate_matrix_file = sample_output_dir + 'Picard/' + sample_name + '.metrics.txt'
+	if not os.path.isfile(mark_duplicate_file) or args.refresh:
+		print_process_time('Picard: mark duplicate -' + args.rank)
+		picard_mark_duplicate = 'java -jar {0} MarkDuplicates REMOVE_DUPLICATES=true ASSUME_SORTED=true INPUT={1} OUTPUT={2} METRICS_FILE={3}'.format(picard_app, sort_bam_file, mark_duplicate_file, mark_duplicate_matrix_file)
+		run_bash_command(sample_log_dir, 'Picard_MarkDuplicate', picard_mark_duplicate)
+
+		picard_build_bam_index = 'java -jar {0} BuildBamIndex INPUT={1}'.format(picard_app, mark_duplicate_file)
+		run_bash_command(sample_log_dir, 'Picard_BuildBamIndex', picard_build_bam_index)
+
+		print_process_time('Picard: mark duplicate -' + args.rank, 1)
+
+		if not os.path.isfile(mark_duplicate_file):
+			print_ornament('   ABORT! no \'Picard Mark Duplicate\' result! check Picard_MarkDuplicate.log!', 100, ' ', 1, 0)
+			return False
+		else:
+			return True
+	else:
+		print_ornament(' WARNING! \'Picard Mark Duplicate\' existed! skipped.', 100, ' ', 1, 0)
+		return True
+
+#---run samtools mpileup--
+def run_samtools_mpileup(args, sample_output_dir, sample_name, sample_log_dir):
+	sort_bam_file = '{0}{1}/{2}.{3}.bam'.format(sample_output_dir, ['SAMtools', 'Picard'][args.markdup], sample_name, ['sort', 'dedup'][args.markdup])
+	samtools_mpileup_file = sample_output_dir + 'SAMtools/' + sample_name + '.mpu'
+	if not os.path.isfile(samtools_mpileup_file) or args.refresh:
+		print_process_time('samtools: mpileup' + ['', ' (unlimited)'][args.unlimited] + ' -' + args.rank)
+		samtools_mpileup = 'samtools mpileup{0} -BAQ0 -f {1} {2} > {3}'.format(['', ' -d10000000'][args.unlimited], args.reference, sort_bam_file, samtools_mpileup_file)
+#		samtools_mpileup = 'samtools mpileup{0} -m 3 -F 0.0002 -BAQ0 -f {1} {2} > {3}'.format(['', ' -d10000000'][args.unlimited], args.reference, sort_bam_file, samtools_mpileup_file)
+		run_bash_command(sample_log_dir, 'SAMtools_Mpileup', samtools_mpileup)
+		print_process_time('samtools: mpileup -' + args.rank, 1)
+
+		if not os.path.isfile(samtools_mpileup_file):
+			print_ornament('   ABORT! no samtools mpileup result! check SAMtools_Mpileup.log!', 100, ' ', 1, 0)
+			return False
+		else:
+			return True
+	else:
+		print_ornament(' WARNING! \'mpileup\' existed! skipped.', 100, ' ', 1, 0)
+		return True
+
+#---run varscan indel--
+def run_varscan_indel(args, output_dir, name, varscan, log_dir):
+	if args.indel:
+		indel_vcf_file = make_dir(output_dir + 'VarScan/') + name + '.indel.vcf'
+		indel_file = output_dir + 'VarScan/' + name + '.indel.tab'
+
+		if args.vcf and os.path.isfile(indel_vcf_file) and not args.refresh:
+			print_ornament(' WARNING! \'varscan indel vcf\' existed! skipped.', 100, ' ', 1, 0)
+		else:
+			if not args.vcf and os.path.isfile(indel_file) and not args.refresh:
+				print_ornament(' WARNING! \'varscan indel tab\' existed! skipped.', 100, ' ', 1, 0)
+			else:
+				print_process_time('varscan: indel (base quality:{0},var freq:{1},pvalue:{2})'.format(args.basequality, args.varfreq, args.pvalue) + ' -' + args.rank)
+				mpileup_file = output_dir + 'SAMtools/' + name + '.mpu'
+				varscan_indel = 'java -jar {0} {1}pileup2indel {2} --min-avg-qual {3} --min-var-freq {4} --p-value {5} {6}> {7}'.format(varscan, ['', 'm'][args.vcf], mpileup_file, args.basequality, args.varfreq, args.pvalue, ['', '--output-vcf 1 '][args.vcf], [indel_file, indel_vcf_file][args.vcf])
+				run_bash_command(log_dir, 'VarScan_Indel', varscan_indel)
+				print_process_time('varscan: indel -' + args.rank, 1)
+
+				if not os.path.isfile(indel_file):
+					print_ornament(' WARNING! no varscan indel result! check VarScan_Indel.log!', 100, ' ', 1, 0)
+
+#---run varscan snp--
+def run_varscan_snp(args, output_dir, name, varscan, log_dir):
+	if args.snp:
+		snp_vcf_file = make_dir(output_dir + 'VarScan/') + name + '.snp.vcf'
+		snp_file = output_dir + 'VarScan/' + name + '.snp.tab'
+
+		if args.vcf and os.path.isfile(snp_vcf_file) and not args.refresh:
+			print_ornament(' WARNING! \'varscan snp vcf\' existed! skipped.', 100, ' ', 1, 0)
+		else:
+			if not args.vcf and os.path.isfile(snp_file) and not args.refresh:
+				print_ornament(' WARNING! \'varscan snp tab\' existed! skipped.', 100, ' ', 1, 0)
+			else:
+				print_process_time('varscan: snp (base quality:{0},var freq:{1},pvalue:{2})'.format(args.basequality, args.varfreq, args.pvalue) + ' -' + args.rank)
+				mpileup_file = output_dir + 'SAMtools/' + name + '.mpu'
+				varscan_snp = 'java -jar {0} {1}pileup2snp {2} --min-avg-qual {3} --min-var-freq {4} --p-value {5} {6}> {7}'.format(varscan, ['', 'm'][args.vcf], mpileup_file, args.basequality, args.varfreq, args.pvalue, ['', '--output-vcf 1 '][args.vcf], [snp_file, snp_vcf_file][args.vcf])
+				run_bash_command(log_dir, 'VarScan_Snp', varscan_snp)
+				print_process_time('varscan: snp -' + args.rank, 1)
+
+				if not os.path.isfile(snp_file):
+					print_ornament(' WARNING! no varscan snp result! check VarScan_Snp.log!', 100, ' ', 1, 0)
+
+#---run varscan consensus call--
+def run_varscan_consensus_call(args, output_dir, name, varscan, log_dir):
+	if args.consensus:
+		consensus_call_vcf_file = make_dir(output_dir + 'VarScan/') + name + '.consensus.vcf'
+		consensus_call_file = output_dir + 'VarScan/' + name + '.consensus.tab'
+
+		if args.vcf and os.path.isfile(consensus_call_vcf_file) and not args.refresh:
+			print_ornament(' WARNING! \'varscan consensus call vcf\' existed! skipped.', 100, ' ', 1, 0)
+		else:
+			if not args.vcf and os.path.isfile(consensus_call_file) and not args.refresh:
+				print_ornament(' WARNING! \'varscan consensus call tab\' existed! skipped.', 100, ' ', 1, 0)
+			else:
+				print_process_time('varscan: consensus call (base quality:{0},pvalue:{1})'.format(args.basequality, args.pvalue) + ' -' + args.rank)
+				mpileup_file = output_dir + 'SAMtools/' + name + '.mpu'
+				varscan_consensus_call = 'java -jar {0} {1}pileup2cns {2} --min-avg-qual {3} --p-value {4} {5}> {6}'.format(varscan, ['', 'm'][args.vcf], mpileup_file, args.basequality, args.pvalue, ['', '--output-vcf 1 '][args.vcf], [consensus_call_file, consensus_call_vcf_file][args.vcf])
+				run_bash_command(log_dir, 'VarScan_ConseCall', varscan_consensus_call)
+				print_process_time('varscan: consensus call -' + args.rank, 1)
+
+				if not os.path.isfile(consensus_call_file):
+					print_ornament(' WARNING! no varscan consensus call result! check VarScan_ConseCall.log!', 100, ' ', 1, 0)
+
+#---run varscan read count--
+def	run_varscan_read_count(args, output_dir, name, varscan, log_dir):
+	if args.readcount:
+		read_count_file = make_dir(output_dir + 'VarScan/') + name + '.read.tab'
+
+		if not os.path.isfile(read_count_file) or args.refresh:
+			print_process_time('varscan: read count (base quality:{0})'.format(args.basequality) + ' -' + args.rank)
+			mpileup_file = '{0}SAMtools/{1}.mpu'.format(output_dir, name)
+			varscan_read_count = 'java -jar {0} readcounts {1} --min-base-qual {2} --output-file {3}'.format(varscan, mpileup_file, args.basequality, read_count_file)
+			run_bash_command(log_dir, 'VarScan_ReadCount', varscan_read_count)
+			print_process_time('varscan: read count -' + args.rank, 1)
+
+			if not os.path.isfile(read_count_file):
+				print_ornament(' WARNING! no varscan read counts result! check VarScan_ReadCount.log!', 100, ' ', 1, 0)
+		else:
+			print_ornament(' WARNING! \'varscan read counts\' existed! skipped.', 100, ' ', 1, 0)
+
+#---run picard create sequence dictionary-- 
+#def run_picard_dictionary(args, output_dir, name, picard_csd_app, log_dir):
+#CreateSequenceDictionary from Picard 1.123
+def run_picard_create_sequence_dictionary(args, output_dir, name, picard_app, log_dir):
+	if args.indel and args.gatk:
+		refer_dict_file = [args.reference[:-2] + 'dict', args.reference[:-5] + 'dict'][args.reference.endswith('fasta')]
+
+		if not os.path.isfile(refer_dict_file) or args.refresh:
+			print_process_time('picard: CS dictionary -' + args.rank)
+#			picard_dictionary = 'java -jar {0} R={1} O={2}'.format(picard_csd_app, args.reference, refer_dict_file)
+			picard_create_sequence_dictionary = 'java -jar {0} CreateSequenceDictionary REFERENCE={1} OUTPUT={2}'.format(picard_app, args.reference, refer_dict_file)			
+			run_bash_command(log_dir, 'Picard_CSDictionary', picard_create_sequence_dictionary)
+			print_process_time('picard: CS dictionary -' + args.rank, 1)
+
+			if not os.path.isfile(refer_dict_file):
+				print_ornament(' WARNING! no \'picard CS dictionary\' result! check Picard_CSDictionary.log!', 100, ' ', 1, 0)
+				return False
+			else:
+				return True
+		else:
+			print_ornament(' WARNING! \'picard CS dictionary\' existed! skipped.', 100, ' ', 1, 0)
+			return True
+
+#---run gatk indel--
+def run_gatk_indel(args, sample_output_dir, sample_name, gatk_app, sample_log_dir):
+	if args.indel and args.gatk:
+		indel_file = make_dir(sample_output_dir + 'GATK/') + sample_name + '.indel.vcf'
+
+		if not os.path.isfile(indel_file) or args.refresh:
+			print_process_time('gatk: indel -' + args.rank)
+			sort_bam_file = '{0}{1}/{2}.{3}.bam'.format(sample_output_dir, ['SAMtools', 'Picard'][args.markdup], sample_name, ['sort', 'dedup'][args.markdup])
+			gatk_indel = 'java -jar {0} -R {1} -T HaplotypeCaller -I {2} -o {3}'.format(gatk_app, args.reference, sort_bam_file, indel_file)
+			run_bash_command(sample_log_dir, 'GATK_Indel', gatk_indel)
+			print_process_time('gatk: indel -' + args.rank, 1)
+
+			if not os.path.isfile(indel_file):
+				print_ornament(' WARNING! no gatk indel result! check GATK_Indel.log!', 100, ' ', 1, 0)
+				return False
+			else:
+				return True
+
+		else:
+			print_ornament(' WARNING! \'gatk indel\' existed! skipped.', 100, ' ', 1, 0)
+			return True		
+
+#---run samtools flagstat--
+def run_samtools_flagstat(args, output_dir, name, log_dir):
+	sort_bam_file = '{0}SAMtools/{1}.sort.bam'.format(output_dir, name)
+	flagstat_file = sort_bam_file.replace('.sort.bam', '.flagstat.txt')
+	
+	if not os.path.isfile(flagstat_file) or args.refresh:
+		print_process_time('samtools: flagstat -' + args.rank)
+		samtools_flagstat = 'samtools flagstat {0} > {1}'.format(sort_bam_file, flagstat_file)
+		run_bash_command(log_dir, 'SAMtools_FlagStat', samtools_flagstat)
+		print_process_time('samtools: flagstat -' + args.rank, 1)
+
+		if not os.path.isfile(flagstat_file):
+			print_ornament(' WARNING! no samtools flagstat! check SAMtools_FlagStat.log!', 100, ' ', 1, 0)
+			return False
+		else:
+			return True
+
+	else:
+		print_ornament(' WARNING! \'samtools flagstat\' existed! skipped.', 100, ' ', 1, 0)
+		return True
+
+#---get data infor--
+def get_data_infor(sample_output_dir, sample_name, args, sample_result_dir, fastq1_file, fastq2_file):
+	data_infor_file = sample_result_dir + sample_name + '.data_infor.txt'
+
+	if not os.path.isfile(data_infor_file) or args.refresh:
+		print_process_time('get: data infor -' + args.rank)
+		flagstat_file = '{0}SAMtools/{1}.flagstat.txt'.format(sample_output_dir, sample_name)
+		data_infor = ['sample\tread_number\tproperly_mapped_number\tratio\n']
+		flagstat_content = open(flagstat_file, 'rU').readlines()
+		map_ratio = flagstat_content[8].split('paired (')[1].split(' :')[0]
+		data_infor.append(sample_name + '\t' + add_thousand_separator(flagstat_content[5].split(' ')[0]) + '\t' + add_thousand_separator(flagstat_content[8].split(' ')[0]) + '\t' + map_ratio + '\n')
+		bam_file = sample_output_dir + 'SAMtools/' + sample_name + '.bam'
+		data_infor.append('\n' + get_insert_size_standard_deviation(bam_file) + '\n')
+		data_infor.append('\nfastq1:\t' + os.path.normpath(fastq1_file) + '\nfastq1_md5:\t' + get_md5_sum(fastq1_file) + '\nfastq1_size:\t' + get_file_size(fastq1_file) + '\n')
+		data_infor.append('fastq2:\t' + os.path.normpath(fastq2_file) + '\nfastq2_md5:\t' + get_md5_sum(fastq2_file) + '\nfastq2_size:\t' + get_file_size(fastq2_file) + '\n')
+		write_content(data_infor_file, data_infor)
+		print_process_time('get: data infor -' + args.rank, 1)
+		return [True, False][map_ratio == '0.00%']
+
+	else:
+		print_ornament(' WARNING! \'data infor\' existed! skipped.', 100, ' ', 1, 0)
+		return True
+
+#---get insert size & standard deviation
+def get_insert_size_standard_deviation(bam_file):
+	insert_size = [int(x) for x in run_shell('samtools view ' + bam_file + '|head -100000|cut -f 9', 1).split() if x != '0']
+	insert_size_mean = round(numpy.mean([abs(x) for x in insert_size]), 1)
+	standard_deviation = round(numpy.std(insert_size), 1)
+	return 'insert_size_mean:\t' + str(insert_size_mean) + '\nstandard_deviation:\t' + str(standard_deviation) + '\n'
+
+#---get indel brief result--
+def	get_indel_brief_result(args, output_dir, name, result_dir):
+	indel_file = output_dir + 'VarScan/' + name + '.indel.tab'	
+
+	if not os.path.isfile(indel_file):
+		print_ornament(' WARNING! no varscan indel result! collect indel brief result stopped!', 100, ' ', 1, 0)
+
+	else:
+		indel_brief_result_file = result_dir + name + '.indel_brief.tab'
+		print_process_time('get: indel brief result -' + args.rank)
+		indel_content = open(indel_file, 'rU').readlines()
+		indel_brief_result = ['\t'.join(x.split()[:7]) + '\n' for x in indel_content]
+		write_content(indel_brief_result_file, indel_brief_result)
+
+		indel_brief_result_freq = [indel_brief_result[0]] + [x for x in indel_brief_result[1:] if float(x.split('\t')[6].split('%')[0]) >= float(args.resultfreq)*100]
+		indel_brief_result_freq_file = result_dir + name + '.' + args.resultfreq + '.indel_brief.tab'
+		write_content(indel_brief_result_freq_file, indel_brief_result_freq)
+
+		print_process_time('get: indel brief result -' + args.rank, 1)
+
+#---get indel normalized result--
+def	get_indel_normalized_result(args, output_dir, name, result_dir):
+	indel_file = output_dir + 'VarScan/' + name + '.indel.tab'	
+	read_count_file = output_dir + 'VarScan/' + name + '.read.tab'
+
+	if not os.path.isfile(indel_file):
+		print_ornament(' WARNING! no varscan indel result! collect indel brief result stopped!', 100, ' ', 1, 0)
+
+	elif not os.path.isfile(read_count_file):
+		print_ornament(' WARNING! no varscan read count result! indel normalized calculation stopped!', 100, ' ', 1, 0)
+
+	else:
+		indel_normalized_result_file = result_dir + name + '.' + args.resultfreq + '.indel_normalized.tab'
+		print_process_time('get: indel normalized result -' + args.rank)
+		indel_content = open(indel_file, 'rU').readlines()
+		read_count_content = open(read_count_file, 'rU').readlines()
+		read_depth = str(int(numpy.median([int(x.split('\t')[3]) for x in read_count_content[1:]])))
+		indel_normalized_result_raw = ['\t'.join(x.split('\t')[:4] + [read_depth, x.split('\t')[5], str(round(int(x.split('\t')[5])/float(read_depth)*100, 2)) + '%', '\n']) for x in indel_content[1:]]
+		indel_normalized_result = ['\t'.join(indel_content[0].split('\t')[:4] + ['Depth', 'Variant', 'Frequency\n'])] + [x for x in indel_normalized_result_raw if float(x.split('\t')[6].split('%')[0]) >= float(args.resultfreq)*100]
+		write_content(indel_normalized_result_file, indel_normalized_result)
+		print_process_time('get: indel normalized result -' + args.rank, 1)
+
+#---get indel near target--
+def	get_indel_near_target(args, output_dir, name, result_dir):
+#	indel_file = output_dir + 'VarScan/' + name + '.indel.tab'
+#	indel_file = result_dir + name + '.' + args.resultfreq + '.indel_normalized.tab'
+	indel_file = result_dir + name + '.' + args.resultfreq + '.indel_brief.tab'
+	indel_content = open(indel_file, 'rU').readlines()
+
+	if args.target == 'none':
+		potential_chromo = list(set([x.split()[0] for x in indel_content[1:]]))
+		potential_target = []
+		if potential_chromo != []:
+			for chromo in potential_chromo:
+				potential_chromo_content = [x for x in indel_content if x.startswith(chromo)]
+				potential_varfreq = [float(x.split()[6].split('%')[0]) for x in potential_chromo_content]
+				potential_cut = potential_chromo_content[potential_varfreq.index(max(potential_varfreq))]
+				potential_target.append(':'.join(potential_cut.split()[:2]))
+			target = ','.join(potential_target)
+			has_indel = True
+		else:
+			print_ornament('   ABORT! no indel detected.', 100, ' ', 1, 0)
+			has_indel = False
+	else:
+		target = args.target
+		has_indel = True
+
+	if has_indel:
+		print_process_time('get: indel near target ({0}, -{1}nt, +{2}nt)'.format(target, args.upstream, args.downstream) + ' -' + args.rank)
+		for target_position in [x.lstrip().rstrip() for x in target.split(',')]:
+			indel_near_target_file = result_dir + name + '.' + args.resultfreq + '.' + target_position + '.indel' + ['', '_potential'][args.target == 'none'] + '.tab'
+			target_cut = target_position.split(':')[-1]
+			target_chromo = ':'.join(target_position.split(':')[:-1])
+			indel_chromo = [x for x in indel_content if x.startswith(target_chromo)]
+			target_upstream = int(target_cut) - int(args.upstream)
+			target_downstream = int(target_cut) + int(args.downstream)
+			indel_near_target = [indel_content[0]] + [x for x in indel_chromo if int(x.split()[1]) >= target_upstream and int(x.split()[1]) <= target_downstream]
+			write_content(indel_near_target_file, indel_near_target)
+		print_process_time('get: indel near target -' + args.rank, 1)
+	return has_indel
+
+#---plot indel detail--
+def	plot_indel_detail(output_dir, name, args, result_dir, log_dir):
+#	indel_file = output_dir + 'VarScan/' + name + '.indel.tab'
+#	indel_file = result_dir + name + '.' + args.resultfreq + '.indel_normalized.tab'
+	indel_file = result_dir + name + '.' + args.resultfreq + '.indel_brief.tab'
+	indel_content = open(indel_file, 'rU').readlines()
+	if args.target == 'none':
+		potential_chromo = list(set([x.split()[0] for x in indel_content[1:]]))
+		potential_target = []
+		for chromo in potential_chromo:
+			potential_chromo_content = [x for x in indel_content if x.startswith(chromo)]
+			potential_varfreq = [float(x.split()[6].split('%')[0]) for x in potential_chromo_content]
+			potential_cut = potential_chromo_content[potential_varfreq.index(max(potential_varfreq))]
+			potential_target.append(':'.join(potential_cut.split()[:2]))
+		target = ','.join(potential_target)
+	else:
+		target = args.target
+
+	print_process_time('plot: indel detail ({0}, -{1}nt, +{2}nt)'.format(target, args.upstream, args.downstream) + ' -' + args.rank)
+	reference_dict = get_fasta_dict(args.reference)
+	#reference_dict = get_fasta_dict('/data/tongji1/liyx/CSIA/CSIA.Test/Refer/iGFP_448bp.fa')
+	#reference_dict = get_fasta_dict('/Users/yingxiangli/MY/A/CIpipe/refer/LSL_1008bp.fa')
+	#indel_near_target_file = '/data/tongji1/liyx/CSIA/CSIA.Test/Output/iGFP/VarScan/iGFP.indel.tab'
+	#indel_near_target_file = '/Users/yingxiangli/MY/A/CIpipe/output/test1/VarScan/test1.indel.tab'
+
+	for target_position in target.split(','):
+		indel_near_target_file = result_dir + name + '.' + args.resultfreq + '.' + target_position + '.indel' + ['', '_potential'][args.target == 'none'] + '.tab'
+		#target_position = 'iGFP_448bp:235'
+		#target_position = 'LSL_1008bp:88'
+		indel_near_target = open(indel_near_target_file, 'rU').readlines()
+		target_cut = target_position.split(':')[-1]
+		target_chromo = ':'.join(target_position.split(':')[:-1])
+		indel_chromo = [x for x in indel_near_target if x.startswith(target_chromo)]
+		target_upstream = int(target_cut) - int(args.upstream)
+		target_downstream = int(target_cut) + int(args.downstream)
+		indel_near_target_one = [x for x in indel_chromo if int(x.split()[1]) >= target_upstream and int(x.split()[1]) <= target_downstream]
+		reference_sequence = reference_dict[target_chromo][target_upstream:target_downstream].upper()
+		R_file = log_dir + name + '.' + args.resultfreq + '.' + target_position + '.indel' + ['', '_potential'][args.target == 'none'] + '.r'
+		#R_file = '/data/tongji1/liyx/CSIA/CSIA.Test/Output/iGFP/log/iGFP.indel.' + target_position + '.r'
+		pdf_file = result_dir + name + '.' + args.resultfreq + '.' + target_position + '.indel' + ['', '_potential'][args.target == 'none'] + '.pdf'
+		#pdf_file = '/data/tongji1/liyx/CSIA/CSIA.Test/Output/iGFP/result/iGFP.indel.' + target_position + '.pdf'
+		plot_indel_detail_one(True, indel_near_target_one, reference_sequence, target_cut, target_upstream, target_downstream, pdf_file, target_chromo, R_file)
+		plot_indel_detail_one(False, indel_near_target_one, reference_sequence, target_cut, target_upstream, target_downstream, pdf_file, target_chromo, R_file)
+
+	print_process_time('plot: indel detail -' + args.rank, 1)
+
+#---plot indel detail one--
+def plot_indel_detail_one(is_sort_varfreq, indel_near_target_one, reference_sequence, target_cut, target_upstream, target_downstream, pdf_file, target_chromo, R_file):
+	if is_sort_varfreq:
+		indel_near_target_one = sorted(indel_near_target_one, key=lambda x:float(x.split()[6][:-1]), reverse=True)
+	position_value = list(set([int(x.split()[1]) for x in indel_near_target_one]))
+	position_value.sort()
+	R = []
+	R.append('reference_sequence = \'{0}\'\n'.format(reference_sequence))
+	R.append('reference_length = {0}\n'.format(str(len(reference_sequence))))
+	R.append('target_cut = {0}\n'.format(str(target_cut)))
+	R.append('target_upstream = {0}\n'.format(str(target_upstream)))
+	R.append('target_downstream = {0}\n'.format(str(target_downstream)))
+	R.append('position_value = {0}\n'.format(str(len(position_value))))
+	R.append('position_number = {0}\n'.format(str(len(indel_near_target_one))))
+	R.append('insertion_number = {0}\n'.format(str(len([x for x in indel_near_target_one if x.split()[3].startswith('*/+')]))))	
+	R.append('deletion_number = {0}\n'.format(str(len([x for x in indel_near_target_one if x.split()[3].startswith('*/-')]))))	
+	R.append('total_height=position_number*2 + position_value*2 + insertion_number\n')
+	R.append('character_cex=8\ncharacter_cex_small=7\nadd_height=0.5\nadd_width=0.45\n\n')
+	R.append('''text_sequence <- function(direction, separate=1, sequence, cord_x, cord_y, cex, color='black'){
+	if (direction == 'left'){
+		if (separate == 1){
+			for (i in nchar(sequence):1){
+				text(cord_x - nchar(sequence) + i, cord_y, substr(sequence, i, i), pos = 2, cex = cex, col = color)
+			}
+		}else{
+			text(cord_x, cord_y, sequence, pos = 2, cex = cex, col = color)
+		}
+	}else{
+		if (separate == 1){
+			for (i in 1:nchar(sequence)){
+				text(cord_x + i - 1, cord_y, substr(sequence, i, i), pos = 4, cex = cex, col = color)
+			}
+		}else{
+			text(cord_x, cord_y, sequence, pos = 4, cex = cex, col = color)
+		}
+	}
+}
+\n''')
+	if is_sort_varfreq:
+		R.append('pdf(\'{0}\', width = reference_length + 31, height = position_number*2 + insertion_number + 8)\n'.format(pdf_file.replace('.pdf', '_sort.pdf')))
+	else:
+		R.append('pdf(\'{0}\', width = reference_length + 31, height = total_height + 8)\n'.format(pdf_file))
+	R.append('par(family=\'mono\', cex=1, mar=c(0, 0, 0, 0), oma=c(0, 0, 0, 0))\n')
+#	R.append('plot(0, 0, xlim = c(-11, reference_length + 20), ylim = c(0, total_height + 8), type = \'n\', xlab = \'\', ylab = \'\', axes = FALSE)\n')
+	R.append('plot(0, 0, xlim = c(-11, reference_length + 20), ylim = c(0, total_height + 8), type = \'n\', xlab = \'\', ylab = \'\', axes = FALSE)\n')
+	R.append('text((reference_length + 31)/2 - 11, total_height  + 6, \'{0}\', pos = 3, font = 2, cex = character_cex + 1)\n'.format(target_chromo))
+	R.append('text_sequence(\'left\', 0, \'position:\', 0, total_height  + 3, character_cex)\n')
+	R.append('text_sequence(\'right\', 0, target_upstream + 1, 1, total_height + 3, character_cex_small)\n')
+	R.append('text_sequence(\'right\', 0, target_cut, target_cut - target_upstream, total_height + 3, character_cex_small)\n')
+	R.append('text_sequence(\'right\', 0, target_downstream, target_downstream - target_upstream, total_height + 3, character_cex_small)\n')
+	R.append('text_sequence(\'right\', 0, \'|\', 1, total_height + 2, character_cex_small - 2.5, \'red\')\n')
+	R.append('text_sequence(\'right\', 0, \'|\', target_cut - target_upstream, total_height + 2, character_cex_small - 2.5, \'red\')\n')
+	R.append('text_sequence(\'right\', 0, \'|\', target_downstream - target_upstream, total_height + 2, character_cex_small - 2.5, \'red\')\n')
+	R.append('text_sequence(\'left\', 0, \'reference:\', 0, total_height + 1, character_cex)\n')
+	R.append('text_sequence(\'right\', 1, reference_sequence, 1, total_height + 1, character_cex)\n')
+	indel_line_order = 0
+
+	if is_sort_varfreq:
+		indel_line_order += 2
+		for indel in indel_near_target_one:
+			indel_split = indel.split()
+			value = int(indel_split[1])
+			single_indel = plot_single_indel(indel_split, value, indel_line_order, reference_sequence, target_upstream, target_downstream)
+			R = R + single_indel[0]
+			indel_line_order = single_indel[1]
+		R_file = R_file.replace('.r', '.sort.r')
+	else:
+		for value in position_value:
+			indel_line_order += 2
+			indel_position_value = [x for x in indel_near_target_one if x.split()[1] == str(value)]
+			for indel in indel_position_value:
+				indel_split = indel.split()
+				single_indel = plot_single_indel(indel_split, value, indel_line_order, reference_sequence, target_upstream, target_downstream)
+				R = R + single_indel[0]
+				indel_line_order = single_indel[1]
+	R.append('garbage = dev.off()\n')
+	write_content(R_file, R)
+	os.system('Rscript ' + R_file)
+
+#---plot single indel--
+def plot_single_indel(indel_split, value, indel_line_order, reference_sequence, target_upstream, target_downstream):
+	R = []
+	if indel_split[3].startswith('*/-'):			
+		R.append('text_sequence(\'left\', 0, \'{0}:\', 0, total_height - {1}, character_cex)\n'.format(str(value), str(indel_line_order)))
+		R.append('text_sequence(\'left\', 0, \'{0}\', reference_length + 7, total_height - {1}, character_cex, \'red\')\n'.format(indel_split[6], str(indel_line_order)))	
+		R.append('text_sequence(\'right\', 0, \'deletion\', reference_length + 8, total_height - {0}, character_cex)\n'.format(str(indel_line_order)))
+#		R.append('text_sequence(\'right\', 0, \'deletion  {1}\', reference_length + 8, total_height - {0}, character_cex)\n'.format(str(indel_line_order), '(' + add_thousand_separator(indel_split[4]) + ';' + add_thousand_separator(indel_split[5]) + ')'))
+		deletion_length = len(indel_split[3]) - 3
+		indel_sequence = reference_sequence[:(value - target_upstream)] + ' '*deletion_length + reference_sequence[(value - target_upstream + deletion_length):]
+		R.append('text_sequence(\'right\', 1, \'{0}\', 1, total_height - {1}, character_cex)\n'.format(indel_sequence, str(indel_line_order)))
+		indel_sequence_delete = ' '*(value - target_upstream) + '-'*deletion_length + ' '*(target_downstream - value - deletion_length)
+		R.append('text_sequence(\'right\', 1, \'{0}\', 1, total_height - {1}, character_cex, \'red\')\n'.format(indel_sequence_delete, str(indel_line_order)))
+		indel_line_order += 2
+	else:
+		R.append('text_sequence(\'left\', 0, \'{0}:\', 0, total_height - {1}, character_cex)\n'.format(str(value), str(indel_line_order)))
+		R.append('text_sequence(\'left\', 0, \'{0}\', reference_length + 7, total_height - {1}, character_cex, \'red\')\n'.format(indel_split[6], str(indel_line_order)))
+		R.append('text_sequence(\'right\', 0, \'insertion\', reference_length + 8, total_height - {0}, character_cex)\n'.format(str(indel_line_order)))
+#		R.append('text_sequence(\'right\', 0, \'insertion {1}\', reference_length + 8, total_height - {0}, character_cex)\n'.format(str(indel_line_order), '(' + add_thousand_separator(indel_split[4]) + ';' + add_thousand_separator(indel_split[5]) + ')'))
+		R.append('text_sequence(\'right\', 1, \'{0}\', 1, total_height - {1}, character_cex)\n'.format(reference_sequence, str(indel_line_order)))
+		indel_sequence_insertion = indel_split[3][3:]
+		R.append('text_sequence(\'right\', 1, \'{0}\', {1} - target_upstream + 0.5, total_height - {2} - 1, character_cex, \'red\')\n'.format(indel_sequence_insertion, str(value), str(indel_line_order)))
+		R.append('text_sequence(\'right\', 1, \'^\', {0} - target_upstream + add_width, total_height - {1} - add_height, character_cex + 0.5, \'red\')\n'.format(str(value), str(indel_line_order)))
+		indel_line_order += 3
+	return R, indel_line_order
+
+#---get fasta dict--
+def get_fasta_dict(fasta_file):
+	fasta_name = []
+	fasta_sequence = []
+	fasta_number = -1
+	fasta_content = [x.rstrip() for x in open(fasta_file, 'rU').readlines() if len(x.rstrip()) != 0]
+	for line in fasta_content:
+		if line[0] == '>':
+			fasta_name.append(line[1:])
+			fasta_number += 1
+			fasta_sequence.append('')
+		else:
+			fasta_sequence[fasta_number] = fasta_sequence[fasta_number] + line
+	fasta_dict = dict(zip(fasta_name, fasta_sequence))
+	return fasta_dict
+
+#---run indel matrix--
+def run_indel_matrix(result_dir, args_more):
+	print_process_time('run: indel matrix')
+	refer_name_all = list(set([os.path.basename(os.path.splitext(x.reference)[0]) for x in args_more]))
+	for refer_name in refer_name_all:
+		indel_matrix_file = result_dir + args_more[0].batch + '.' + refer_name + '.indel_matrix.tab'
+		indel_matrix_head = 'Chrom\tPosition\tRef\tCons'
+		indel_matrix_dict = {}
+		n = 0		
+		for args_one in args_more:
+			if os.path.basename(os.path.splitext(args_one.reference)[0]) == refer_name:
+#				indel_file = args_one.output + args_one.name + '/VarScan/' + args_one.name + '.indel.tab'			
+#				indel_file = args_one.output + args_one.name + '/result/' + args_one.name + '.' + args_one.resultfreq + '.indel_normalized.tab'
+				indel_file = args_one.output + args_one.name + '/result/' + args_one.name + '.' + args_one.resultfreq + '.indel_brief.tab'
+				if not os.path.isfile(indel_file):
+					print_ornament(' WARNING! no {0} varscan indel result!'.format(args_one.name), 100, ' ', 1, 0)
+				else:
+					indel_matrix_head = indel_matrix_head + '\t{0}_read_support_ref\t{1}_read_support_indel\t{2}_indel_frequency'.format(args_one.name, args_one.name, args_one.name)
+					indel = open(indel_file, 'rU').readlines()
+					indel_dict = dict(zip(['\t'.join(x.split()[0:4]) for x in indel[1:]], ['\t'.join(x.split()[4:7]) for x in indel[1:]]))
+					for x, y in indel_dict.items():
+						if not x in indel_matrix_dict.keys():
+							indel_matrix_dict[x] = ['na\tna\tna']*n + [y]
+						else:
+							indel_matrix_dict[x] = indel_matrix_dict[x] + [y]
+					for x in indel_matrix_dict.keys():
+						if not x in indel_dict.keys():
+							indel_matrix_dict[x] = indel_matrix_dict[x] + ['na\tna\tna']
+				n += 1
+		indel_matrix = [indel_matrix_head + '\n'] + sorted([x + '\t' + '\t'.join(indel_matrix_dict[x]) + '\n' for x in indel_matrix_dict.keys()], key=lambda x:int(x.split('\t')[1]))
+		write_content(indel_matrix_file, indel_matrix)
+	print_process_time('run: indel matrix', 1)
+#	return indel_matrix
+
+#---run map infor matrix--
+def run_map_infor_matrix(result_dir, args_more):
+	print_process_time('run: map infor matrix')
+	refer_name_all = list(set([os.path.basename(os.path.splitext(x.reference)[0]) for x in args_more]))
+	map_infor_matrix_file = result_dir + args_more[0].batch + '.map_infor.txt'
+	map_infor_matrix = ['sample\tread_number\tproperly_mapped_number\tratio\n']
+	for args_one in args_more:
+		data_infor_file = args_one.output + args_one.name + '/result/' + args_one.name + '.data_infor.txt'
+		if not os.path.isfile(data_infor_file):
+			print_ornament(' WARNING! no {0} data infor!'.format(args_one.name), 100, ' ', 1, 0)
+		else:
+			data_infor = open(data_infor_file, 'rU').readlines()
+			map_infor_matrix.append(data_infor[1])
+		write_content(map_infor_matrix_file, map_infor_matrix)
+	print_process_time('run: map infor matrix', 1)
+#	return indel_matrix
+
+#---run collect result--
+def run_collect_result(result_dir, args_more):
+	print_process_time('run: collect results')
+	refer_name_all = list(set([os.path.basename(os.path.splitext(x.reference)[0]) for x in args_more]))
+	for args_one in args_more:
+		collect_result_one_dir = result_dir + args_one.name
+		if os.path.exists(collect_result_one_dir):
+			shutil.rmtree(collect_result_one_dir)
+		collect_result_one = 'cp -r ' + args_one.output + args_one.name + '/result ' + collect_result_one_dir
+		run_bash_command(args_more[0].output + args_more[0].batch + '.log/', 'collect_result', collect_result_one)
+	print_process_time('run: collect results', 1)
+
+#---plot indel distribution--
+def plot_indel_distribution(output_dir, name, args, result_dir, log_dir):
+	print_process_time('plot: indel distribution -' + args.rank)
+#	indel_file = output_dir + 'VarScan/' + name + '.indel.tab'
+#	indel_file = output_dir + 'result/' + name + '.' + args.resultfreq + '.indel_normalized.tab'
+	indel_file = output_dir + 'result/' + name + '.' + args.resultfreq + '.indel_brief.tab'
+#	indel_file = '/data/tongji1/liyx/CIpipe/output/test1/VarScan/test1.indel.tab'
+	indel_content = open(indel_file, 'rU').readlines()
+	refer_name_all = list(set([x.split('\t')[0] for x in indel_content[1:]]))
+	for refer_name in refer_name_all:
+		indel_content_one = [x for x in indel_content if x.startswith(refer_name)]
+		Rplot_indel_size_location(log_dir, name, refer_name, args.resultfreq, indel_content_one, result_dir)
+	print_process_time('plot: indel distribution -' + args.rank, 1)
+
+#---Rplot indel distribution--
+def Rplot_indel_size_location(log_dir, name, refer_name, result_frequency, indel_content_one, result_dir):
+	R_file = log_dir + name + '.' + refer_name + '.' + result_frequency + '.indel_distribution.r'
+	indel_matrix = "indel_matrix = matrix(c('" + "','".join(["','".join(x.split('\t')[:7]) for x in indel_content_one]) + "'), nrow=7)\n"
+	pdf_file = result_dir + name + '.' + refer_name + '.' + result_frequency + '.indel_distribution.pdf'
+	R = []
+	R.append(indel_matrix)
+	R.append('''
+plot_size_locus <- function(indel_matrix){
+	varfreq_number = sapply(indel_matrix[7, ], function(x) as.numeric(strsplit(x, '%')[[1]][1]))
+	indel_locus = sapply(indel_matrix[2, ], function(x) as.numeric(x))
+	indel_length = sapply(indel_matrix[4, ], function(x) nchar(strsplit(x, '/')[[1]][2])-1)
+	indel_length_max = max(indel_length)
+	indel_type = sapply(indel_matrix[4, ], function(x) substr(strsplit(x, '/')[[1]][2], 1, 1))
+	size_ylim_max = 10*ceiling(max(varfreq_number)/10)
+
+	for (i in 1:ncol(indel_matrix)){
+		if (indel_type[i] == '-'){
+			indel_length[i] = -indel_length[i]
+		}
+	}
+	if (indel_length_max == max(indel_length)){
+		indel_length_max_inverse = -indel_length_max
+	}else{
+		indel_length_max_inverse = indel_length_max
+	}
+	indel_length_label = sort(c(0, unique(indel_length), indel_length_max_inverse))
+	for (i in 1:length(indel_length_label)){
+		if (as.numeric(indel_length_label[i]) > 0){
+			indel_length_label[i] = paste('+', indel_length_label[i], sep='')
+		}else{
+			indel_length_label[i] = as.character(indel_length_label[i])
+		}
+	}
+
+	size_polygon_x = c()
+	size_polygon_y = c()
+	for (i in 1:ncol(indel_matrix)){
+		indel_length_one = indel_length[i]
+		indel_varfreq_one = varfreq_number[i]
+		if (indel_length_one%in%size_polygon_y[, 1]){
+			former_varfreq = max(size_polygon_y[which(size_polygon_y[, 1] == indel_length_one), 3])
+		}else{
+			former_varfreq = 0
+		}
+		size_polygon_y = rbind(size_polygon_y, c(indel_length_one, former_varfreq, former_varfreq + indel_varfreq_one, former_varfreq + indel_varfreq_one, former_varfreq))
+		colnames(size_polygon_y) = NULL
+		if (indel_length_one < 0){
+			size_polygon_x = rbind(size_polygon_x, c(indel_length_one, indel_length_one, indel_length_one+1, indel_length_one+1))
+		}else{
+			size_polygon_x = rbind(size_polygon_x, c(indel_length_one-1, indel_length_one-1, indel_length_one, indel_length_one))
+		}
+		colnames(size_polygon_x) = NULL
+	}
+
+	indel_matrix_brief = rbind(sapply(indel_matrix[4, ], function(x) strsplit(x, '/')[[1]][2]), indel_type, indel_length, varfreq_number)
+	indel_matrix_final = matrix(indel_matrix_brief[, order(indel_matrix_brief[2, ], as.numeric(indel_matrix_brief[3, ]), as.numeric(indel_matrix_brief[4, ]), decreasing=T)], nrow=4)
+
+	indel_matrix_plus = matrix(indel_matrix_final[, which(indel_matrix_final[2, ] == '+')], nrow=4)
+	if (ncol(indel_matrix_plus) != 0){
+		indel_matrix_plus = matrix(indel_matrix_plus[, order(as.numeric(indel_matrix_plus[3, ]), -as.numeric(indel_matrix_plus[4, ]))], nrow=4)
+#		indel_plus = cbind(indel_matrix_plus[1, ], rep(indel_length_max, ncol(indel_matrix_plus)), seq(90, 92-2*ncol(indel_matrix_plus), -2))
+		locus_ylim_max = 10*ceiling(max(as.numeric(indel_matrix_plus[4, ]))/10)		
+	}else{
+		locus_ylim_max = 10
+	}
+
+	indel_matrix_minus = matrix(indel_matrix_final[, which(indel_matrix_final[2, ] == '-')], nrow=4)
+	if (ncol(indel_matrix_minus) != 0){
+#		indel_minus = cbind(indel_matrix_minus[1, ], rep(-indel_length_max, ncol(indel_matrix_minus)), seq(90, 92-2*ncol(indel_matrix_minus), -2))
+		locus_ylim_min = -10*ceiling(max(as.numeric(indel_matrix_minus[4, ]))/10)
+	}else{
+		locus_ylim_min = -10
+	}
+
+#	indel size
+	plot(0, 0, type='n', axes=F, xlab='indel_size', ylab='var_freq', xlim=c(-indel_length_max-1, indel_length_max+1), ylim=c(0, size_ylim_max), main=indel_matrix[1, 1])
+	axis(1, sort(c(0, unique(indel_length), indel_length_max_inverse)), labels=indel_length_label)
+	axis(2, seq(0, size_ylim_max, 10), labels=paste(seq(0, size_ylim_max, 10), '%', sep=''))
+	for (i in 1:nrow(size_polygon_x)){
+		polygon(size_polygon_x[i, ], size_polygon_y[i, -1], col=rainbow(nrow(size_polygon_x))[i])
+	}
+#	text(as.numeric(indel_plus[, 2]), as.numeric(indel_plus[, 3]), indel_plus[, 1], pos=4)
+#	text(as.numeric(indel_minus[, 2]), as.numeric(indel_minus[, 3]), indel_minus[, 1], pos=2)
+
+#	indel locus
+	if (min(as.numeric(indel_matrix[2, ])) - 5 < 0){
+		locus_xlim_min = 0
+	}else{
+		locus_xlim_min = min(as.numeric(indel_matrix[2, ])) - 5
+	}
+	locus_xlim_max = max(as.numeric(indel_matrix[2, ])) + 5
+
+	locus_polygon_x = c()
+	locus_polygon_y = c()
+	for (i in 1:ncol(indel_matrix)){
+		if (indel_type[i] == '+'){
+			indel_varfreq_one = varfreq_number[i]
+			indel_locus_one = indel_locus[i]
+		}else{
+			indel_varfreq_one = varfreq_number[i]*-1
+			indel_locus_one = indel_locus[i]*-1
+		}
+		if (indel_locus_one%in%locus_polygon_y[, 1]){
+			if (indel_locus_one > 0){
+				former_varfreq = max(locus_polygon_y[which(locus_polygon_y[, 1] == indel_locus_one), 3])
+			}else{
+				former_varfreq = min(locus_polygon_y[which(locus_polygon_y[, 1] == indel_locus_one), 3])
+			}
+		}else{
+			former_varfreq = 0
+		}
+
+		locus_polygon_y = rbind(locus_polygon_y, c(indel_locus_one, former_varfreq, indel_varfreq_one+former_varfreq, indel_varfreq_one+former_varfreq, former_varfreq))
+		colnames(locus_polygon_y) = NULL
+		locus_polygon_x = rbind(locus_polygon_x, c(abs(indel_locus_one), abs(indel_locus_one), abs(indel_locus_one)+1, abs(indel_locus_one)+1))
+		colnames(locus_polygon_x) = NULL
+	}
+
+	plot(0, 0, type='n', axes=F, xlab='indel_locus', ylab='var_freq', xlim=c(locus_xlim_min, locus_xlim_max), ylim=c(locus_ylim_min, locus_ylim_max), main=indel_matrix[1, 1])
+	axis(2, seq(locus_ylim_min, locus_ylim_max, 10), labels=paste(abs(seq(locus_ylim_min, locus_ylim_max, 10)), '%', sep=''))
+	axis(1, c(locus_xlim_min+2, sort(unique(indel_locus)), locus_xlim_max-2))
+	abline(h=0)
+	text(locus_xlim_min, 2, 'insertion', pos=4)
+	text(locus_xlim_min, -2, 'deletion', pos=4)
+	for (i in 1:nrow(locus_polygon_x)){
+		polygon(locus_polygon_x[i, ], locus_polygon_y[i, -1], col=rainbow(nrow(locus_polygon_x))[i])
+	}
+
+	garbage = dev.off()
+
+}
+
+''')
+	R.append("pdf('{0}', width=12, height=9)\n".format(pdf_file))
+	R.append("plot_size_locus(indel_matrix)\n")
+	write_content(R_file, R)
+	os.system('Rscript ' + R_file)
+
+#--common--
+class get_class_from_dict:
+	def __init__(self, **entries): 
+		self.__dict__.update(entries)
+
+def add_thousand_separator(int_number):
+	return str(format(int(int_number), ','))
+
+def get_absolute_file(file):
+	split_file = [x for x in file.split('/') if x != '']
+	current_dir = os.getcwd()
+	split_current_dir = [x for x in current_dir.split('/') if x != '']
+	if len(set(split_file)&set(split_current_dir)) == 0:
+		absolute_file = current_dir + '/' + file
+	else:
+		absolute_file = file
+	if os.path.isfile(absolute_file):
+		return absolute_file
+	else:
+		return 'WRONG file or directory!'
+
+def get_file_size(file):
+	file_size = os.path.getsize(file)
+	unit = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+	unit_order = 0
+	if not file_size == 0:
+		while len(str(file_size)) >= 5:
+#			former_file_size = file_size
+#			former_unit_order = unit_order
+			file_size = round(file_size/1024.0, 1)
+			unit_order += 1
+		return str(file_size) + ' ' + unit[unit_order]
+	else:
+		return 0
+
+def get_group_order(group):
+	group_order = []
+	for group_one in group:
+		group_one_flat = []
+		for group_one_split in group_one.split(','):
+			if len(group_one_split.split('-')) == 1:
+				group_one_flat.append(int(group_one_split))
+			else:
+				group_one_flat = group_one_flat + range(int(group_one_split.split('-')[0]), int(group_one_split.split('-')[1]) + 1)
+		group_order = group_order + [group_one_flat]
+	return group_order
+
+def get_md5_sum(file):
+	md5_sum = run_shell('md5sum ' + file, 1).split()[0]
+	return md5_sum
+
+def print_process_time(function_name, is_finish=0, width=100, indent=16, split_sign=':'):
+	function_name_indent = ' '*(indent - len(function_name.split(split_sign)[0])) + function_name
+	if is_finish == 0:		
+		print_ornament(function_name_indent + ' '*(width - 23 - len(function_name_indent)) + '  -running', width)
+	else:
+		print_ornament(function_name_indent + ' '*(width - 23 - len(function_name_indent)) + '  -done   ', width)
+
+def make_dir(dir):
+	dir = dir.strip().rstrip("\\")
+	if not os.path.exists(dir):
+		os.makedirs(dir)
+	return dir
+
+def make_initial_upper(word):
+	initial_upper = word[0].upper() + word[1:].lower()
+	return initial_upper
+
+def print_ornament(title, width=100, ornament_type=' ', show_time=1, show_date = 0):
+	if show_time == 1:
+		if show_date == 0:
+			ornament = '\t|' + title + ornament_type*(width - 13 - len(title)) + ' @ ' + time.strftime("%X", time.localtime()) + '|'
+		else:
+			ornament = '\t|' + title + ornament_type*(width - 24 - len(title)) + ' @ ' + time.strftime("%m-%d-%Y %X", time.localtime()) + '|'
+	else:
+		ornament = '\t|' + title + ornament_type*(width - 2 - len(title)) + '|'
+	print ornament
+
+def write_content(content_file, content):
+	output = open(content_file, 'w')
+	output.writelines(content)
+	output.close()
+
+def run_bash_command(log_dir, command_name, command):
+	command_file = make_dir(log_dir) + command_name + '.sh'
+	write_content(command_file, command)
+	bash_command = 'bash "' + command_file + '" > ' + command_file.replace('.sh', '.log') + ' 2>&1'
+	run_shell(bash_command)
+
+def run_shell(shell_command, is_get_output=0):
+	shell_output = subprocess.Popen(shell_command, shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).stdout.read()
+	if is_get_output:
+		return shell_output
+
+##----PROCESS------##
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.stderr.write('\t|ABORT! User interrupted me! ;-) Bye!' + ' '*62 + '|\n\t|' + '~'*98 + '|\n')
+        sys.exit(0)
+
+##----TEST--------##
