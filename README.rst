@@ -40,11 +40,9 @@ CIpipe -R ref.fa -D data/ -O output/ -N test1 -G
 optional arguments:
   -h, --help            show this help message and exit
   -V, --version         show program's version number and exit
-  -R REFERENCE, --reference REFERENCE
-                        sample reference file, fasta format. (eg: my_ref.fa)
-  -D DATA, --data DATA  sample data directory, fastq-ONLY. one file for single end, two files for paired end. (eg: my_data/)
-  -O OUTPUT, --output OUTPUT
-                        output directory, will be created if not exists. (eg: my_output/)
+  -R REFERENCE, --reference REFERENCE	sample reference file, fasta format. (eg: my_ref.fa)
+  -D DATA, --data DATA	sample data directory, fastq-ONLY. one file for single end, two files for paired end. (eg: my_data/)
+  -O OUTPUT, --output OUTPUT	output directory, will be created if not exists. (eg: my_output/)
   -F, --refresh         whether to refresh all processes. default: OFF, -RE will turn ON.
   -N NAME, --name NAME  sample name, default is name of output directory. (eg: my_sample)
   -RK RANK, --rank RANK	sample rank. (eg: 1)
