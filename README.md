@@ -1,20 +1,18 @@
 README
 ===========================
-web version is in: https://zlab.umassmed.edu/CIpipe/ or http://www.calyx.biz/cipipe.html 
+you can also check: https://zlab.umassmed.edu/CIpipe/ or http://www.calyx.biz/cipipe.html 
 
 #CIpipe- CRISPR indel pipe
-###Apr22, 2016 (Nov07, 2016)
-###Yingxiang Li
+###Apr22, 2016 (Nov07, 2016), Yingxiang Li
 
 ##Content:
-	Introduction
-	Installation
-	Synopsis
-	Commands and Options
-	Workflow Charts
-	Annotation of example.input.tab
-	Test Cases
-	Thanks
+ Introduction
+ Installation
+ Usage
+ Workflow Charts
+ Annotation of example.input.tab
+ Test Cases
+ Thanks
 
 ##Introduction:
 CRISPR-Cas9 is a powerful tool for sequence-specific genome editing. The Cas protein cuts genomic DNA at locations complementary to a single guide RNA. Insertions and deletions (indels) often result when the cuts are repaired. Currently, there is no easy-to-use computational pipeline to determine the locations, identities, and frequencies of the indels. We have developed a pipeline, named CIpipe (CRISPR Indel pipeline), to identify indels in high-throughput DNA sequencing data and provide the statistical characterization of these indels.
@@ -26,10 +24,9 @@ After installation of pip, type in your terminal:
 ```Bash
 (sudo) pip install CIpipe (--upgrade)
 ```
-##Commands and Options:
+##Usage:
 
 ###For a single sample analysis.
-​
 Synopsis
 ```Bash
 CIpipe -R reference -D data -O output
@@ -41,9 +38,8 @@ CIpipe -R ref.fa -D data/ -O output/ -N test1 -T chr1:100 -US 20 -DS 20
 CIpipe -R ref.fa -D data/ -O output/ -N test1 -Q 0.1
 CIpipe -R ref.fa -D data/ -O output/ -N test1 -G
 ```
-
 ###optional arguments:
-|:--------- |:--------
+|:----------|:-----------|
 |-h, --help|show this help message and exit|
 |-V, --version|show program's version number and exit|
 |-R REFERENCE, --reference REFERENCE|sample reference file, fasta format. (eg: my_ref.fa)|
@@ -72,7 +68,6 @@ CIpipe -R ref.fa -D data/ -O output/ -N test1 -G
 |-Q RESULTFREQ, --resultfreq RESULTFREQ|to select the results above appointed frequency, default: 0.05.|
 
 ###For multiple samples ​and advanced analysis.
-
 Synopsis
 ```Bash
 CIpipe -E
@@ -80,8 +75,12 @@ CIpipe -I test.input.tab
 ```
 
 optional arguments:
-|:--------- |:--------
+|:---------|:--------|
 |-E, --example|whether to create example input data. modify the example.input.tab to fit your data. default: OFF, -E will turn ON.|
 |-I INPUT, --input INPUT|information table of all input data. all settings should be in it. (eg. example.input.tab)|
 
+##Workflow Charts
+##Annotation of example.input.tab
+##Test Cases
+##Thanks
 
