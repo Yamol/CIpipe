@@ -15,13 +15,13 @@ Content
 * [Test Cases](#Test Cases)
 * [Thanks](#Thanks)
 
- <a name="Introduction"/> 
+<a name="Introduction"/>
 Introduction
 ------
 
 CRISPR-Cas9 is a powerful tool for sequence-specific genome editing. The Cas protein cuts genomic DNA at locations complementary to a single guide RNA. Insertions and deletions (indels) often result when the cuts are repaired. Currently, there is no easy-to-use computational pipeline to determine the locations, identities, and frequencies of the indels. We have developed a pipeline, named CIpipe (CRISPR Indel pipeline), to identify indels in high-throughput DNA sequencing data and provide the statistical characterization of these indels.
 
- <a name="Installation"/>
+<a name="Installation"/>
 Installation
 ------
 
@@ -108,9 +108,10 @@ Workflow Charts
 ###For multiple samples and advanced analysis. (complete).
 ![](http://www.calyx.biz/uploads/2/1/9/2/21925892/2706147_orig.png "")
 ***
-***
 
-##Annotation of example.input.tab
+<a name="Annotation of example.input.tab"/>
+Annotation of example.input.tab
+------
 Type: ```Bash CIpipe -E``` to create an `example.input.tab​`.
 Then modify it to fit your real data.
 
