@@ -5,7 +5,8 @@ you can also check: https://zlab.umassmed.edu/CIpipe/ or http://www.calyx.biz/ci
 #CIpipe - CRISPR Indel pipe
 ###Apr22, 2016 (Nov07, 2016), Yingxiang Li
 
-##Content:
+Content
+---
 * [Introduction](#Introduction)
 * [Installation](#Installation)
 * [Usage](#Usage)
@@ -14,18 +15,20 @@ you can also check: https://zlab.umassmed.edu/CIpipe/ or http://www.calyx.biz/ci
 * [Test Cases](#Test Cases)
 * [Thanks](#Thanks)
 
-##Introduction:
+Introduction
+---
 CRISPR-Cas9 is a powerful tool for sequence-specific genome editing. The Cas protein cuts genomic DNA at locations complementary to a single guide RNA. Insertions and deletions (indels) often result when the cuts are repaired. Currently, there is no easy-to-use computational pipeline to determine the locations, identities, and frequencies of the indels. We have developed a pipeline, named CIpipe (CRISPR Indel pipeline), to identify indels in high-throughput DNA sequencing data and provide the statistical characterization of these indels.
 
-##Installation:
+Installation
+---
 CIpipe can only run on Mac OS or Linux OS.
 You need `python 2.7.10`, `R 3.2.2`, `bwa 0.7.5a`, `fastqc v0.11.2`, `samtools 1.3`, `java 1.7.0_95` first.
 After installation of pip, type in your terminal:
 ```Bash
 (sudo) pip install CIpipe (--upgrade)
 ```
-##Usage:
-
+Usage
+---
 ###For a single sample analysis.
 Synopsis
 ```Bash
@@ -83,8 +86,8 @@ optional arguments:
 |-E, --example|whether to create example input data. modify the example.input.tab to fit your data. default: OFF, -E will turn ON.|
 |-I INPUT, --input INPUT|information table of all input data. all settings should be in it. (eg. example.input.tab)|
 
-##Workflow Charts
-
+Workflow Charts
+---
 ***
 ###For a single samples analysis (basic).
 ![](http://www.calyx.biz/uploads/2/1/9/2/21925892/2706147_orig.png "")
@@ -106,7 +109,8 @@ Then modify it to fit your real data.
 
 ![](http://www.calyx.biz/uploads/2/1/9/2/21925892/4173713_orig.png "")
 
-##Test Cases
+Test Cases
+---
 Test data is a part from 
 >**Li,Y. et al. (2015) A versatile reporter system for CRISPR-mediated chromosomal rearrangements. Genome Biol., 16, 111.**
 
@@ -151,5 +155,6 @@ The full data is: [PRJNA283020](https://www.ncbi.nlm.nih.gov/sra?linkname=biopro
 
 5. You can change all kinds of parameters to filter the results. For example, you can change the p value to 0.01 to get a stricter indels result table; change base quality to 15 to get more potential indels.	
 
-##Thanks
+Thanks
+---
 We thank the members of the `Weng` and `Xue` laboratories for helpful discussions, in particular `Chunqing Song, Pengpeng Liu, Yu Fu, Tyler Borrman, Michael Purcaro, Arjan van der Velde` for their insightful suggestions. 
