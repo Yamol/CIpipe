@@ -1,5 +1,5 @@
 #!/usr/bin/python
-__version__ = '1.146'
+__version__ = '1.148'
 
 ##----PACKAGE------##
 import argparse
@@ -57,14 +57,15 @@ def get_args():
 	parser.add_argument('-N', '--name', help='sample name, default is name of output directory. (eg: my_sample)', default='none')
 	parser.add_argument('-RK', '--rank', help='sample rank. (eg: 1)', default='none')
 
+	parser.add_argument('-QC', '--fastqc', help='whether to check fastq quality by FastQC. default: ON, -QC will turn OFF.', action='store_false', default=True)
+#
 	parser.add_argument('-CA', '--cutadapta', help='cut 3\' adapter with cutadapt, default: none.', default='none')
 	parser.add_argument('-CG', '--cutadaptg', help='cut 5\' adapter with cutadapt, default: none.', default='none')
 
 	parser.add_argument('-S', '--seed', help='the minimum seed length in BWA, default: 19.', default='19')
 
-#	parser.add_argument('-F', '--fastqc', help='whether to check fastq quality by FastQC. default: ON, -F will turn OFF.', action='store_false', default=True)
-#	parser.add_argument('-X', '--index', help='whether to build reference index by BWA. default: ON, -X will turn OFF.', action='store_false', default=True)
-	parser.add_argument('-M', '--markdup', help='whether to mark and remove duplicate by Picard. default: OFF, -PC will turn ON.', action='store_true', default=False)
+	parser.add_argument('-X', '--index', help='whether to build reference index by BWA. default: ON, -X will turn OFF.', action='store_false', default=True)
+	parser.add_argument('-M', '--markdup', help='whether to mark and remove duplicate by Picard. default: OFF, -M will turn ON.', action='store_true', default=False)
 	parser.add_argument('-U', '--unlimited', help='whether to set no read depth limit in mpileup by SAMtools. default: ON, -U will turn OFF.', action='store_false', default=True)
 
 	parser.add_argument('-G', '--gatk', help='whether to search for indel by GATK. default: OFF, -G will turn ON.', action='store_true', default=False)
@@ -183,6 +184,14 @@ def run_mode_one(args):
 
 								else:
 									print_ornament('   ABORT! fix picard dictionary and re-try!', 100, ' ', 0, 0)
+
+#							elif args.delly:
+#								delly_deletion = run_delly_deletion(args, sample_output_dir, sample_name, sample_log_dir)
+
+#									if delly_deletion:
+										#---finish information
+#										print_ornament('CONGRATS! \'' + sample_name + '\' (delly) is finished!', 100, ' ', 1, 0)
+#										run_done(start_time, sample_log_dir)
 
 							else:
 								#---samtools mpileup
@@ -416,21 +425,25 @@ def run_bwa_index(args, log_dir):
 
 #---run FastQC quality control--
 def run_fastqc_quality_control(args, output_dir, fastq1_file, fastq2_file, log_dir):
-	quality_control_dir = make_dir(output_dir + 'FastQC/')
-#	fastqc_fastq_file_exist = [os.path.isfile(quality_control_dir + os.path.basename(os.path.splitext(x)[0]) + '_fastqc.zip') for x in [fastq1_file, fastq2_file]]
-	fastqc_zip_file = [x for x in os.listdir(quality_control_dir) if x.endswith('.zip')]
-#	quality_control_dir = '/data/tongji1/liyx/CIpipe/simulation/output/wgsim_simulate_0817/simulate_6C2_11/FastQC/'
-#	fastq1_file = '/data/tongji1/liyx/CIpipe/simulation/data/wgsim/ins500A_del5001_del5003_del50030/ins500A_del5001_del5003_del50030.r1.fq'
-#	if args.fastqc:	
-	if len(fastqc_zip_file) != [1, 2][fastq2_file != ''] or args.refresh:
-		print_process_time('fastqc: quality control -' + args.rank)
-		fastqc_quality_control = 'fastqc -q --extract -o ' + quality_control_dir + ' ' + fastq1_file + ' ' + fastq2_file
-		run_bash_command(log_dir, 'FastQC_QualiyControl', fastqc_quality_control)
-		print_process_time('fastqc: quality control -' + args.rank, 1)
-		if len(os.listdir(quality_control_dir)) == 0:
-			print_ornament(' WARNING! no fastqc result! check FastQC_QualiyControl.log!', 100, ' ', 1, 0)
-	else:
-		print_ornament(' WARNING! \'fastqc\' existed! skipped.', 100, ' ', 1, 0)
+	if args.fastqc:
+		print_ornament(' WARNING! no FastQC quality control.', 100, ' ', 1, 0)
+
+	else:	
+		quality_control_dir = make_dir(output_dir + 'FastQC/')
+	#	fastqc_fastq_file_exist = [os.path.isfile(quality_control_dir + os.path.basename(os.path.splitext(x)[0]) + '_fastqc.zip') for x in [fastq1_file, fastq2_file]]
+		fastqc_zip_file = [x for x in os.listdir(quality_control_dir) if x.endswith('.zip')]
+	#	quality_control_dir = '/data/tongji1/liyx/CIpipe/simulation/output/wgsim_simulate_0817/simulate_6C2_11/FastQC/'
+	#	fastq1_file = '/data/tongji1/liyx/CIpipe/simulation/data/wgsim/ins500A_del5001_del5003_del50030/ins500A_del5001_del5003_del50030.r1.fq'
+	#	if args.fastqc:	
+		if len(fastqc_zip_file) != [1, 2][fastq2_file != ''] or args.refresh:
+			print_process_time('fastqc: quality control -' + args.rank)
+			fastqc_quality_control = 'fastqc -q --extract -o ' + quality_control_dir + ' ' + fastq1_file + ' ' + fastq2_file
+			run_bash_command(log_dir, 'FastQC_QualiyControl', fastqc_quality_control)
+			print_process_time('fastqc: quality control -' + args.rank, 1)
+			if len(os.listdir(quality_control_dir)) == 0:
+				print_ornament(' WARNING! no fastqc result! check FastQC_QualiyControl.log!', 100, ' ', 1, 0)
+		else:
+			print_ornament(' WARNING! \'fastqc\' existed! skipped.', 100, ' ', 1, 0)
 
 #---run cutadapt cut adapter--
 def run_cutadapt_cut_adapter(args, output_dir, fastq1_file, fastq2_file, log_dir):
@@ -705,6 +718,28 @@ def run_gatk_indel(args, sample_output_dir, sample_name, gatk_app, sample_log_di
 
 		else:
 			print_ornament(' WARNING! \'gatk indel\' existed! skipped.', 100, ' ', 1, 0)
+			return True		
+
+#---run delly deletion--
+def run_delly_deletion(args, sample_output_dir, sample_name, sample_log_dir):
+	if args.indel and args.delly:
+		deletion_file = make_dir(sample_output_dir + 'Delly/') + sample_name + '.indel.bcf'
+
+		if not os.path.isfile(deletion_file) or args.refresh:
+			print_process_time('delly: deletion -' + args.rank)
+			sort_bam_file = '{0}{1}/{2}.{3}.bam'.format(sample_output_dir, ['SAMtools', 'Picard'][args.markdup], sample_name, ['sort', 'dedup'][args.markdup])
+			delly_deletion = 'delly call -t DEL -g {0} -o {1} {2}'.format(args.reference, deletion_file, sort_bam_file, )
+			run_bash_command(sample_log_dir, 'Delly_Deletion', delly_deletion)
+			print_process_time('delly: deletion -' + args.rank, 1)
+
+			if not os.path.isfile(deletion_file):
+				print_ornament(' WARNING! no delly deletion result! check Delly_Deletion.log!', 100, ' ', 1, 0)
+				return False
+			else:
+				return True
+
+		else:
+			print_ornament(' WARNING! \'delly deletion\' existed! skipped.', 100, ' ', 1, 0)
 			return True		
 
 #---run samtools flagstat--

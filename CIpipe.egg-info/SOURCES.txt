@@ -1,0 +1,13 @@
+README.rst
+setup.py
+CIpipe/CIpipe
+CIpipe/GenomeAnalysisTK.jar
+CIpipe/VarScan.v2.3.9.jar
+CIpipe/__init__.py
+CIpipe/example.input.tab
+CIpipe/picard.jar
+CIpipe.egg-info/PKG-INFO
+CIpipe.egg-info/SOURCES.txt
+CIpipe.egg-info/dependency_links.txt
+CIpipe.egg-info/requires.txt
+CIpipe.egg-info/top_level.txt
