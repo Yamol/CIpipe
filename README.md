@@ -14,13 +14,14 @@ Content
 * [Annotation of example.input.tab](#Annotation of example.input.tab)
 * [Test Cases](#Test Cases)
 * [Thanks](#Thanks)
-* [Introduction2](#Introduction2)
 
+ <a name="Introduction"/> 
 Introduction
 ------
 
 CRISPR-Cas9 is a powerful tool for sequence-specific genome editing. The Cas protein cuts genomic DNA at locations complementary to a single guide RNA. Insertions and deletions (indels) often result when the cuts are repaired. Currently, there is no easy-to-use computational pipeline to determine the locations, identities, and frequencies of the indels. We have developed a pipeline, named CIpipe (CRISPR Indel pipeline), to identify indels in high-throughput DNA sequencing data and provide the statistical characterization of these indels.
 
+ <a name="Installation"/>
 Installation
 ------
 
@@ -31,13 +32,8 @@ After installation of pip, type in your terminal:
 (sudo) pip install CIpipe (--upgrade)
 ```
 
-Introduction2
-------
-
-这是一段普通的文本
-
-
-Usage
+<a name="Usage"/>
+Usage 
 ------
 ###For a single sample analysis.
 Synopsis
@@ -96,6 +92,7 @@ optional arguments:
 |-E, --example|whether to create example input data. modify the example.input.tab to fit your data. default: OFF, -E will turn ON.|
 |-I INPUT, --input INPUT|information table of all input data. all settings should be in it. (eg. example.input.tab)|
 
+<a name="Workflow Charts"/>
 Workflow Charts
 ------
 
@@ -119,6 +116,7 @@ Then modify it to fit your real data.
 
 ![](http://www.calyx.biz/uploads/2/1/9/2/21925892/4173713_orig.png "")
 
+<a name="Test Cases"/>
 Test Cases
 ------
 Test data is a part from 
@@ -164,7 +162,7 @@ The full data is: [PRJNA283020](https://www.ncbi.nlm.nih.gov/sra?linkname=biopro
 		* `test2.indel.LSL_1008bp.mat` (indels across all LSL samples)
 
 5. You can change all kinds of parameters to filter the results. For example, you can change the p value to 0.01 to get a stricter indels result table; change base quality to 15 to get more potential indels.	
-
+<a name="Thanks"/>
 Thanks
 ------
 We thank the members of the `Weng` and `Xue` laboratories for helpful discussions, in particular `Chunqing Song, Pengpeng Liu, Yu Fu, Tyler Borrman, Michael Purcaro, Arjan van der Velde` for their insightful suggestions. 
