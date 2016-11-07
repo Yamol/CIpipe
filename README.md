@@ -14,7 +14,7 @@ Content
 * [Annotation of example.input.tab](#Annotation of example.input.tab)
 * [Test Cases](#Test Cases)
 * [Thanks](#Thanks)
-* [wengben](#wengben)
+* [Introduction](#Introduction)
 
 Introduction
 ------
@@ -31,7 +31,7 @@ After installation of pip, type in your terminal:
 (sudo) pip install CIpipe (--upgrade)
 ```
 
-wengben
+Introduction
 ------
 
 这是一段普通的文本
