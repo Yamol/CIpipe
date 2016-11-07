@@ -137,15 +137,9 @@ CIpipe -R refer/LSL_1008bp.fa -D data/SRR2007490/ -O output/ -N test1
 	1. Extract refer.zip to refer/
 	2. Extract SRR2007490, SRR2007491, SRR207493 to
       data/SRR2007490/, data/SRR2007491/, data/SRR2007493/
-	3. In the terminal, type:
-```Bash
-CIpipe more -E 
-```
- `exmaple.input.tab` will be generated in the current working directory like this:
-
+	3. In the terminal, type: ```Bash CIpipe more -E ``` `exmaple.input.tab` will be generated in the current working directory like this:
 
 	4. Open `example.input.tab` and modify it to `test2.input.tab` as follows:
-
 
 	5. In the terminal, type:
 
